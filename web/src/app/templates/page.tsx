@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TemplateListItemDTO } from "@/types";
-import { Button, Card, EmptyState, Input, PageHeader, Select } from "@/components/ui";
+import { Button, Card, EmptyState, PageHeader } from "@/components/ui";
 
 type Org = { id: string; name: string };
 type FilterTab = "all" | "printable" | "not_printable";
@@ -13,10 +13,7 @@ export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<TemplateListItemDTO[]>([]);
   const [orgs, setOrgs] = useState<Org[]>([]);
-  const [name, setName] = useState("");
-  const [orgId, setOrgId] = useState("");
   const [creating, setCreating] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<FilterTab>("all");
 
@@ -27,23 +24,23 @@ export default function TemplatesPage() {
     ]);
     setTemplates(t);
     setOrgs(o);
-    if (!orgId && o[0]) setOrgId(o[0].id);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function createTemplate() {
-    if (!name.trim() || !orgId) return;
+  // PRD_양식편집기_상세 §8.0: "신규 양식의 초기 필드 수는 0개이며 양식명은 `이름 없는 양식`으로
+  // 시작한다" — 이름을 물어보지 않고 바로 빈 편집기로 들어간다 (프로토타입의 openNewBlankEditor와 동일).
+  async function createBlankTemplate() {
+    if (orgs.length === 0 || creating) return;
     setCreating(true);
     try {
       const res = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, name, pageCount: 1 }),
+        body: JSON.stringify({ orgId: orgs[0].id, name: "이름 없는 양식", pageCount: 1 }),
       });
       if (!res.ok) throw new Error("create failed");
       const created = await res.json();
@@ -84,36 +81,11 @@ export default function TemplatesPage() {
       <PageHeader
         title="양식 관리"
         actions={
-          <Button variant="primary" onClick={() => setShowCreate((v) => !v)}>
+          <Button variant="primary" onClick={createBlankTemplate} disabled={creating}>
             + 빈 양식 업로드
           </Button>
         }
       />
-
-      {showCreate && (
-        <Card className="p-4 mb-6">
-          <div className="flex gap-2">
-            <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="shrink-0">
-              {orgs.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </Select>
-            <Input
-              className="flex-1"
-              placeholder="새 양식 이름"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createTemplate()}
-              autoFocus
-            />
-            <Button variant="primary" onClick={createTemplate} disabled={creating}>
-              편집기에서 PDF 업로드 →
-            </Button>
-          </div>
-        </Card>
-      )}
 
       <div className="flex items-center gap-2 mb-4">
         <label className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border)] bg-white px-3 py-1.5 text-sm w-64">
@@ -202,7 +174,7 @@ export default function TemplatesPage() {
             ))}
           </tbody>
         </table>
-        {filtered.length === 0 && <EmptyState>조건에 맞는 양식이 없습니다.</EmptyState>}
+        {filtered.length === 0 && <EmptyState>등록된 양식이 없습니다.</EmptyState>}
       </Card>
 
       <p className="text-xs text-slate-400 mt-3">
