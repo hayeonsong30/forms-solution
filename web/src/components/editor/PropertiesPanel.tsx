@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 import type { FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
-import { CheckConfigPanel, Field, inputClass, NumberConfigPanel, PercentField, Section, TextConfigPanel } from "./configPanels";
+import {
+  CheckConfigPanel,
+  ChoiceConfigPanel,
+  DateConfigPanel,
+  Field,
+  inputClass,
+  NumberConfigPanel,
+  PercentField,
+  Section,
+  TextConfigPanel,
+  TimeConfigPanel,
+} from "./configPanels";
 
 export function FieldPropertiesPanel({
   field,
@@ -20,7 +31,10 @@ export function FieldPropertiesPanel({
   onPatchLocal: (patch: Partial<FieldDTO>) => void;
   onSave: (body: Record<string, unknown>) => void;
   onSaveType: (type: FieldType) => void;
-  onPatchConfig: <K extends "text" | "number" | "check">(key: K, patch: Partial<NonNullable<FieldDTO["config"][K]>>) => void;
+  onPatchConfig: <K extends "text" | "number" | "check" | "date" | "time" | "choice">(
+    key: K,
+    patch: Partial<NonNullable<FieldDTO["config"][K]>>
+  ) => void;
   onAccept: () => void;
   onReject: () => void;
   onDelete: () => void;
@@ -53,7 +67,10 @@ export function FieldPropertiesPanel({
           <select className={inputClass} value={field.type} disabled={field.locked} onChange={(e) => onSaveType(e.target.value as FieldType)}>
             <option value="text">텍스트</option>
             <option value="number">숫자</option>
+            <option value="date">날짜</option>
+            <option value="time">시간</option>
             <option value="check">체크 판정</option>
+            <option value="choice">선택</option>
           </select>
         </Field>
         <Field label="설명">
@@ -97,6 +114,9 @@ export function FieldPropertiesPanel({
         {field.type === "check" && (
           <CheckConfigPanel value={field.config.check} otherCheckFields={otherCheckFields} onChange={(patch) => onPatchConfig("check", patch)} />
         )}
+        {field.type === "date" && <DateConfigPanel value={field.config.date} onChange={(patch) => onPatchConfig("date", patch)} />}
+        {field.type === "time" && <TimeConfigPanel value={field.config.time} onChange={(patch) => onPatchConfig("time", patch)} />}
+        {field.type === "choice" && <ChoiceConfigPanel value={field.config.choice} onChange={(patch) => onPatchConfig("choice", patch)} />}
       </Section>
 
       <Section title="위치·크기" collapsible collapsed={!showPosition} onToggle={() => setShowPosition((v) => !v)}>

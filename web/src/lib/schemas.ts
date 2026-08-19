@@ -7,7 +7,7 @@ export const boxSchema = z.object({
   h: z.number().gt(0).max(1),
 });
 
-export const fieldTypeSchema = z.enum(["text", "number", "check"]);
+export const fieldTypeSchema = z.enum(["text", "number", "check", "date", "time", "choice"]);
 
 // PRD_양식편집기_상세 §4.1
 export const textConfigSchema = z.object({
@@ -44,10 +44,31 @@ export const checkConfigSchema = z.object({
   exclusiveWithFieldId: z.string().optional(),
 });
 
+// 편집기 상세 PRD §4.4는 1차 데모에서 날짜·시간·라디오/다중선택을 제외했지만, 프로토타입은
+// 실제로 6종(텍스트/숫자/날짜/시간/체크/선택)을 지원한다 — 사용자가 프로토타입 기준으로
+// 가기로 확정(2026-08-19).
+export const dateConfigSchema = z.object({
+  format: z.string().default("YYYY-MM-DD"),
+  allowBlank: z.boolean().default(true),
+});
+
+export const timeConfigSchema = z.object({
+  format: z.string().default("HH:mm"),
+  allowBlank: z.boolean().default(true),
+});
+
+export const choiceConfigSchema = z.object({
+  mode: z.enum(["single", "multiple"]).default("single"),
+  options: z.array(z.string()).default([]),
+});
+
 export const fieldConfigSchema = z.object({
   text: textConfigSchema.partial().optional(),
   number: numberConfigSchema.partial().optional(),
   check: checkConfigSchema.partial().optional(),
+  date: dateConfigSchema.partial().optional(),
+  time: timeConfigSchema.partial().optional(),
+  choice: choiceConfigSchema.partial().optional(),
 });
 
 export const createFieldSchema = z.object({
@@ -81,6 +102,9 @@ export type FieldConfig = z.infer<typeof fieldConfigSchema>;
 export function defaultConfigForType(type: FieldType, overrides: FieldConfig = {}): FieldConfig {
   if (type === "text") return { text: textConfigSchema.parse(overrides.text ?? {}) };
   if (type === "number") return { number: numberConfigSchema.parse(overrides.number ?? {}) };
+  if (type === "date") return { date: dateConfigSchema.parse(overrides.date ?? {}) };
+  if (type === "time") return { time: timeConfigSchema.parse(overrides.time ?? {}) };
+  if (type === "choice") return { choice: choiceConfigSchema.parse(overrides.choice ?? {}) };
   return { check: checkConfigSchema.parse(overrides.check ?? {}) };
 }
 

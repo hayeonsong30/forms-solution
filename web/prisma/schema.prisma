@@ -27,6 +27,9 @@ enum FieldType {
   text
   number
   check
+  date
+  time
+  choice
 }
 
 enum FieldSource {

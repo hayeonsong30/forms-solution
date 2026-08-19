@@ -82,7 +82,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     if (res.ok) patchLocalField(id, await res.json());
   }
 
-  function patchConfig<K extends "text" | "number" | "check">(
+  function patchConfig<K extends "text" | "number" | "check" | "date" | "time" | "choice">(
     field: FieldDTO,
     key: K,
     patch: Partial<NonNullable<FieldDTO["config"][K]>>
@@ -108,7 +108,14 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       w: DEFAULT_BOX.w,
       h: DEFAULT_BOX.h,
     };
-    const label = type === "text" ? "새 텍스트" : type === "number" ? "새 숫자" : "새 체크";
+    const label = {
+      text: "새 텍스트",
+      number: "새 숫자",
+      date: "새 날짜",
+      time: "새 시간",
+      check: "새 체크",
+      choice: "새 선택",
+    }[type];
     let createdId: string | null = null;
     await stack.run({
       label: "필드 생성",

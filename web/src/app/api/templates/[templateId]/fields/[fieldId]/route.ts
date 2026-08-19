@@ -50,6 +50,9 @@ export async function PATCH(
       text: config.text ? { ...currentConfig.text, ...config.text } : currentConfig.text,
       number: config.number ? { ...currentConfig.number, ...config.number } : currentConfig.number,
       check: config.check ? { ...currentConfig.check, ...config.check } : currentConfig.check,
+      date: config.date ? { ...currentConfig.date, ...config.date } : currentConfig.date,
+      time: config.time ? { ...currentConfig.time, ...config.time } : currentConfig.time,
+      choice: config.choice ? { ...currentConfig.choice, ...config.choice } : currentConfig.choice,
     } as Prisma.InputJsonValue;
   }
 

@@ -3,8 +3,16 @@
 import { useState } from "react";
 import type { FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
 
-const TYPE_ICON: Record<FieldType, string> = { text: "T", number: "#", check: "✓" };
-const TYPE_LABEL: Record<FieldType, string> = { text: "텍스트", number: "숫자", check: "체크 판정" };
+const TYPE_ICON: Record<FieldType, string> = { text: "T", number: "#", check: "✓", date: "日", time: "時", choice: "●" };
+const TYPE_LABEL: Record<FieldType, string> = {
+  text: "텍스트",
+  number: "숫자",
+  check: "체크 판정",
+  date: "날짜",
+  time: "시간",
+  choice: "선택",
+};
+const ADD_TYPES: FieldType[] = ["text", "number", "date", "time", "check", "choice"];
 
 export function LeftPanel({
   disabled,
@@ -50,7 +58,7 @@ export function LeftPanel({
       <div className="p-3 border-b border-[var(--color-border)]">
         <div className="text-xs font-medium text-slate-400 mb-2 px-1">ADD</div>
         <div className="grid grid-cols-2 gap-1.5">
-          {(["text", "number", "check"] as FieldType[]).map((type) => (
+          {ADD_TYPES.map((type) => (
             <button
               key={type}
               draggable={!disabled}

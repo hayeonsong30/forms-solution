@@ -7,7 +7,7 @@ import { callGemini } from "./geminiClient";
 export type OcrFieldRequest = {
   dataKey: string;
   label: string;
-  type: "text" | "number" | "check";
+  type: "text" | "number" | "check" | "date" | "time" | "choice";
 };
 
 export type OcrFieldResult = {
@@ -53,6 +53,9 @@ ${fieldList}
 규칙:
 - type="number" 필드는 숫자만 rawValue에 담되, 읽은 그대로(오타 포함) 문자열로 반환하세요.
 - type="check" 필드는 체크/동그라미가 표시되어 있으면 "true", 표시가 없으면 "false", 판독 불가면 null을 반환하세요.
+- type="date" 필드는 읽은 그대로(예: "2026年8月19日", "8/19") 문자열로 반환하세요.
+- type="time" 필드는 읽은 그대로(예: "14:30", "2시 30분") 문자열로 반환하세요.
+- type="choice" 필드는 선택된 항목의 텍스트를 그대로 반환하고, 다중 선택이면 쉼표로 구분하세요.
 - 값을 전혀 찾을 수 없으면 rawValue를 null로 하세요.
 - confidence는 0~1 사이 확신도입니다.
 - 이미지에 없는 필드는 만들지 말고, 목록에 있는 dataKey만 그대로 사용하세요.`;

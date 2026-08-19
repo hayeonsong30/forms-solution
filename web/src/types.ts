@@ -1,4 +1,4 @@
-export type FieldType = "text" | "number" | "check";
+export type FieldType = "text" | "number" | "check" | "date" | "time" | "choice";
 
 export type TextConfig = {
   writingMode: "single" | "multiline";
@@ -31,10 +31,28 @@ export type CheckConfig = {
   exclusiveWithFieldId?: string;
 };
 
+export type DateConfig = {
+  format: string;
+  allowBlank: boolean;
+};
+
+export type TimeConfig = {
+  format: string;
+  allowBlank: boolean;
+};
+
+export type ChoiceConfig = {
+  mode: "single" | "multiple";
+  options: string[];
+};
+
 export type FieldConfig = {
   text?: TextConfig;
   number?: NumberConfig;
   check?: CheckConfig;
+  date?: DateConfig;
+  time?: TimeConfig;
+  choice?: ChoiceConfig;
 };
 
 export type FieldDTO = {
@@ -145,10 +163,12 @@ export type FieldValueDTO = {
   id: string;
   documentId: string;
   fieldId: string | null;
-  field: { id: string; label: string; dataKey: string; required: boolean; type: FieldType } | null;
+  field: { id: string; label: string; dataKey: string; required: boolean; type: FieldType; config: FieldConfig } | null;
   repeatGroupId: string | null;
   repeatColumnId: string | null;
-  repeatColumn: { id: string; label: string; dataKey: string; required: boolean; type: FieldType } | null;
+  repeatColumn:
+    | { id: string; label: string; dataKey: string; required: boolean; type: FieldType; config: FieldConfig }
+    | null;
   rowIndex: number | null;
   rawOcrValue: string | null;
   normalizedValue: string | null;

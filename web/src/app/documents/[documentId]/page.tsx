@@ -18,6 +18,9 @@ const REASON_LABEL: Record<string, string> = {
   required_missing: "필수값 누락",
   type_mismatch: "형식 오류",
   number_out_of_range: "숫자 범위 초과",
+  invalid_date: "날짜 형식 오류",
+  invalid_time: "시간 형식 오류",
+  unknown_choice: "정의되지 않은 선택지",
   choice_conflict: "교차 검증 충돌",
   manual_review_requested: "AI 인식 없음 — 직접 확인 필요",
 };
@@ -232,6 +235,36 @@ function FieldValueRow({
             <option value="true">true</option>
             <option value="false">false</option>
           </Select>
+        ) : type === "date" ? (
+          <Input
+            type="date"
+            className="w-full"
+            value={local}
+            onChange={(e) => {
+              setLocal(e.target.value);
+              onSave(value.id, e.target.value || null);
+            }}
+          />
+        ) : type === "time" ? (
+          <Input
+            type="time"
+            className="w-full"
+            value={local}
+            onChange={(e) => {
+              setLocal(e.target.value);
+              onSave(value.id, e.target.value || null);
+            }}
+          />
+        ) : type === "choice" ? (
+          <ChoiceValueInput
+            options={source?.config.choice?.options ?? []}
+            mode={source?.config.choice?.mode ?? "single"}
+            value={local}
+            onChange={(v) => {
+              setLocal(v);
+              onSave(value.id, v || null);
+            }}
+          />
         ) : (
           <Input
             className="w-full"
@@ -252,6 +285,50 @@ function FieldValueRow({
         )}
       </td>
     </tr>
+  );
+}
+
+function ChoiceValueInput({
+  options,
+  mode,
+  value,
+  onChange,
+}: {
+  options: string[];
+  mode: "single" | "multiple";
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const selected = value ? value.split(",").map((s) => s.trim()) : [];
+  if (mode === "single") {
+    return (
+      <Select className="w-full" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">(미기재)</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <label key={o} className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={selected.includes(o)}
+            onChange={(e) => {
+              const next = e.target.checked ? [...selected, o] : selected.filter((s) => s !== o);
+              onChange(next.join(", "));
+            }}
+          />
+          {o}
+        </label>
+      ))}
+      {options.length === 0 && <span className="text-xs text-slate-400">선택지가 정의되지 않았습니다.</span>}
+    </div>
   );
 }
 

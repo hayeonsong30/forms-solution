@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { CheckConfig, FieldDTO, NumberConfig, TextConfig } from "@/types";
+import type { CheckConfig, ChoiceConfig, DateConfig, FieldDTO, NumberConfig, TextConfig, TimeConfig } from "@/types";
 
 const inputClass =
   "w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]";
@@ -259,6 +259,65 @@ export function CheckConfigPanel({
       {otherCheckFields.length === 0 && (
         <p className="text-[11px] text-slate-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
       )}
+    </>
+  );
+}
+
+export function DateConfigPanel({ value, onChange }: { value?: DateConfig; onChange: (p: Partial<DateConfig>) => void }) {
+  const v = value ?? ({} as DateConfig);
+  return (
+    <>
+      <Field label="표시 형식">
+        <input className={inputClass} defaultValue={v.format ?? "YYYY-MM-DD"} onBlur={(e) => onChange({ format: e.target.value })} />
+      </Field>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
+        빈칸 허용
+      </label>
+    </>
+  );
+}
+
+export function TimeConfigPanel({ value, onChange }: { value?: TimeConfig; onChange: (p: Partial<TimeConfig>) => void }) {
+  const v = value ?? ({} as TimeConfig);
+  return (
+    <>
+      <Field label="표시 형식">
+        <input className={inputClass} defaultValue={v.format ?? "HH:mm"} onBlur={(e) => onChange({ format: e.target.value })} />
+      </Field>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
+        빈칸 허용
+      </label>
+    </>
+  );
+}
+
+export function ChoiceConfigPanel({ value, onChange }: { value?: ChoiceConfig; onChange: (p: Partial<ChoiceConfig>) => void }) {
+  const v = value ?? ({} as ChoiceConfig);
+  return (
+    <>
+      <Field label="선택 방식">
+        <select className={inputClass} value={v.mode ?? "single"} onChange={(e) => onChange({ mode: e.target.value as ChoiceConfig["mode"] })}>
+          <option value="single">단일 선택</option>
+          <option value="multiple">다중 선택</option>
+        </select>
+      </Field>
+      <Field label="선택지 (줄바꿈으로 구분)">
+        <textarea
+          className={inputClass}
+          rows={4}
+          defaultValue={(v.options ?? []).join("\n")}
+          onBlur={(e) =>
+            onChange({
+              options: e.target.value
+                .split("\n")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            })
+          }
+        />
+      </Field>
     </>
   );
 }
