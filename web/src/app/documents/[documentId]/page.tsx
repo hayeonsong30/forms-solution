@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
-import type { DocumentDetailDTO, DocumentStatus } from "@/types";
+import type { DocumentDetailDTO, DocumentStatus, FieldType } from "@/types";
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
   printed: "인쇄됨",
@@ -10,6 +10,14 @@ const STATUS_LABEL: Record<DocumentStatus, string> = {
   review_required: "검수 필요",
   confirmed: "확정",
   error: "오류",
+};
+
+const REASON_LABEL: Record<string, string> = {
+  required_missing: "필수값 누락",
+  type_mismatch: "형식 오류",
+  number_out_of_range: "숫자 범위 초과",
+  choice_conflict: "교차 검증 충돌",
+  manual_review_requested: "AI 인식 없음 — 직접 확인 필요",
 };
 
 export default function DocumentDetailPage({ params }: { params: Promise<{ documentId: string }> }) {
@@ -62,23 +70,28 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
     e.target.value = "";
   }
 
-  async function saveFinalValue(fieldValueId: string, finalValue: string) {
+  async function saveFinalValue(fieldValueId: string, finalValue: string | null) {
     await fetch(`/api/documents/${documentId}/field-values/${fieldValueId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ finalValue: finalValue || null }),
+      body: JSON.stringify({ finalValue }),
     });
     await load();
   }
 
   if (!doc) return <main className="p-8 text-sm text-gray-500">불러오는 중…</main>;
 
+  const unresolvedCount = doc.fieldValues.filter((v) => v.reviewStatus === "needs_review").length;
+
   return (
-    <main className="mx-auto max-w-3xl p-8 space-y-6">
+    <main className="mx-auto max-w-4xl p-8 space-y-6">
       <div>
         <h1 className="text-xl font-semibold">{doc.templateVersion.template.name}</h1>
         <p className="text-sm text-gray-500">
           {doc.ncode} · 상태: <span className="font-medium">{STATUS_LABEL[doc.status]}</span>
+          {doc.status === "review_required" && unresolvedCount > 0 && (
+            <span className="text-amber-600"> · 확인 필요 {unresolvedCount}건</span>
+          )}
         </p>
       </div>
 
@@ -150,8 +163,9 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
             <tr>
               <th className="px-3 py-2">필드</th>
               <th className="px-3 py-2">원본 인식값</th>
+              <th className="px-3 py-2">정규화값</th>
               <th className="px-3 py-2">최종값</th>
-              <th className="px-3 py-2">상태</th>
+              <th className="px-3 py-2">상태 / 사유</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -170,23 +184,44 @@ function FieldValueRow({
   onSave,
 }: {
   value: DocumentDetailDTO["fieldValues"][number];
-  onSave: (id: string, finalValue: string) => void;
+  onSave: (id: string, finalValue: string | null) => void;
 }) {
   const [local, setLocal] = useState(value.finalValue ?? "");
   const source = value.field ?? value.repeatColumn;
-  const label = source ? `${source.label}${value.rowIndex !== null ? ` [${value.rowIndex}]` : ""}` : "-";
+  const type: FieldType = source?.type ?? "text";
+  const label = source ? `${source.label}${value.rowIndex !== null ? ` [행 ${value.rowIndex + 1}]` : ""}` : "-";
 
   return (
-    <tr>
-      <td className="px-3 py-2">{label}</td>
-      <td className="px-3 py-2 text-gray-500">{value.rawOcrValue ?? "—"}</td>
+    <tr className={value.reviewStatus === "needs_review" ? "bg-amber-50/40" : undefined}>
       <td className="px-3 py-2">
-        <input
-          className="border rounded px-2 py-1 w-full"
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          onBlur={() => onSave(value.id, local)}
-        />
+        {label}
+        {source?.required && <span className="text-red-500"> *</span>}
+      </td>
+      <td className="px-3 py-2 text-gray-500">{value.rawOcrValue ?? "—"}</td>
+      <td className="px-3 py-2 text-gray-500">{value.normalizedValue ?? "—"}</td>
+      <td className="px-3 py-2">
+        {type === "check" ? (
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={local}
+            onChange={(e) => {
+              setLocal(e.target.value);
+              onSave(value.id, e.target.value || null);
+            }}
+          >
+            <option value="">(미기재)</option>
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        ) : (
+          <input
+            type={type === "number" ? "text" : "text"}
+            className="border rounded px-2 py-1 w-full"
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={() => onSave(value.id, local || null)}
+          />
+        )}
       </td>
       <td className="px-3 py-2">
         <span
@@ -196,6 +231,11 @@ function FieldValueRow({
         >
           {value.reviewStatus === "needs_review" ? "확인 필요" : "확인됨"}
         </span>
+        {value.reviewReasons.length > 0 && (
+          <div className="text-[11px] text-amber-700 mt-1">
+            {value.reviewReasons.map((r) => REASON_LABEL[r] ?? r).join(", ")}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -203,6 +243,6 @@ function FieldValueRow({
 
 function describeError(json: { error?: string }): string {
   if (json.error === "INVALID_TRANSITION") return "지금 상태에서는 이 동작을 할 수 없습니다.";
-  if (json.error === "VALIDATION_FAILED") return "확인이 필요한 값이 남아 있어 확정할 수 없습니다.";
+  if (json.error === "VALIDATION_FAILED") return "확인이 필요한 값이 남아 있어 확정할 수 없습니다. 아래 표에서 노란색으로 표시된 항목을 채우세요.";
   return "작업을 처리하지 못했습니다.";
 }

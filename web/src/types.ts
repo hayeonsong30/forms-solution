@@ -134,10 +134,10 @@ export type FieldValueDTO = {
   id: string;
   documentId: string;
   fieldId: string | null;
-  field: { id: string; label: string; dataKey: string; required: boolean } | null;
+  field: { id: string; label: string; dataKey: string; required: boolean; type: FieldType } | null;
   repeatGroupId: string | null;
   repeatColumnId: string | null;
-  repeatColumn: { id: string; label: string; dataKey: string; required: boolean } | null;
+  repeatColumn: { id: string; label: string; dataKey: string; required: boolean; type: FieldType } | null;
   rowIndex: number | null;
   rawOcrValue: string | null;
   normalizedValue: string | null;
