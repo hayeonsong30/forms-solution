@@ -7,7 +7,6 @@ import type {
   FieldIssue,
   FieldType,
   NumberConfig,
-  OcrConfig,
   TemplateDetailResponse,
   TextConfig,
 } from "@/types";
@@ -62,7 +61,7 @@ export default function EditorPage({
     await saveField(id, { box });
   }
 
-  function patchConfig<K extends "text" | "number" | "check" | "ocr">(
+  function patchConfig<K extends "text" | "number" | "check">(
     field: FieldDTO,
     key: K,
     patch: Partial<NonNullable<FieldDTO["config"][K]>>
@@ -341,10 +340,6 @@ export default function EditorPage({
               )}
             </Section>
 
-            <Section title="OCR 설정">
-              <OcrConfigPanel value={selected.config.ocr} onChange={(patch) => patchConfig(selected, "ocr", patch)} />
-            </Section>
-
             <Section
               title="위치·크기"
               collapsible
@@ -396,11 +391,8 @@ export default function EditorPage({
               </label>
             </Section>
 
-            <Section title="검증">
-              <p className="text-xs text-gray-500">
-                필수 여부는 기본 정보 섹션에서, 최대 길이/숫자 범위/사용자 패턴은 유형별 설정 섹션에서 설정합니다.
-              </p>
-              {selected.type === "check" && (
+            {selected.type === "check" && (
+              <Section title="검증">
                 <Field label="교차 검증 (동시 true 불가 대상)">
                   <select
                     className="border rounded px-2 py-1 w-full"
@@ -416,8 +408,8 @@ export default function EditorPage({
                   </select>
                   <p className="text-[11px] text-gray-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
                 </Field>
-              )}
-            </Section>
+              </Section>
+            )}
 
             <div className="p-4">
               <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={deleteSelected}>
@@ -723,44 +715,3 @@ function CheckConfigPanel({
   );
 }
 
-function OcrConfigPanel({ value, onChange }: { value?: OcrConfig; onChange: (p: Partial<OcrConfig>) => void }) {
-  const v = value ?? ({} as OcrConfig);
-  return (
-    <>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.enabled ?? true} onChange={(e) => onChange({ enabled: e.target.checked })} />
-        OCR 사용
-      </label>
-      <Field label="형식 힌트">
-        <input
-          className="border rounded px-2 py-1 w-full"
-          placeholder="예: HH:mm"
-          defaultValue={v.formatHint ?? ""}
-          onBlur={(e) => onChange({ formatHint: e.target.value || undefined })}
-        />
-      </Field>
-      <Field label="저신뢰도 처리">
-        <select
-          className="border rounded px-2 py-1 w-full"
-          value={v.lowConfidencePolicy ?? "auto_flag"}
-          onChange={(e) => onChange({ lowConfidencePolicy: e.target.value as OcrConfig["lowConfidencePolicy"] })}
-        >
-          <option value="auto_flag">자동 표시(검수 필요로 표시)</option>
-          <option value="block_confirm">확정 차단</option>
-        </select>
-      </Field>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.autoRotate ?? true} onChange={(e) => onChange({ autoRotate: e.target.checked })} />
-        원본 이미지 자동 회전
-      </label>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={v.contrastEnhance ?? false}
-          onChange={(e) => onChange({ contrastEnhance: e.target.checked })}
-        />
-        대비 강화
-      </label>
-    </>
-  );
-}

@@ -45,7 +45,6 @@ export async function PATCH(
       text: config.text ? { ...currentConfig.text, ...config.text } : currentConfig.text,
       number: config.number ? { ...currentConfig.number, ...config.number } : currentConfig.number,
       check: config.check ? { ...currentConfig.check, ...config.check } : currentConfig.check,
-      ocr: config.ocr ? { ...currentConfig.ocr, ...config.ocr } : currentConfig.ocr,
     } as Prisma.InputJsonValue;
   }
 

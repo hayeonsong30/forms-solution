@@ -31,19 +31,10 @@ export type CheckConfig = {
   exclusiveWithFieldId?: string;
 };
 
-export type OcrConfig = {
-  enabled: boolean;
-  formatHint?: string;
-  lowConfidencePolicy: "auto_flag" | "block_confirm";
-  autoRotate: boolean;
-  contrastEnhance: boolean;
-};
-
 export type FieldConfig = {
   text?: TextConfig;
   number?: NumberConfig;
   check?: CheckConfig;
-  ocr?: OcrConfig;
 };
 
 export type FieldDTO = {

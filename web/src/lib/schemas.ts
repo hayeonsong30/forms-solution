@@ -44,20 +44,10 @@ export const checkConfigSchema = z.object({
   exclusiveWithFieldId: z.string().optional(),
 });
 
-// PRD_양식편집기_상세 §9.3
-export const ocrConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  formatHint: z.string().optional(),
-  lowConfidencePolicy: z.enum(["auto_flag", "block_confirm"]).default("auto_flag"),
-  autoRotate: z.boolean().default(true),
-  contrastEnhance: z.boolean().default(false),
-});
-
 export const fieldConfigSchema = z.object({
   text: textConfigSchema.partial().optional(),
   number: numberConfigSchema.partial().optional(),
   check: checkConfigSchema.partial().optional(),
-  ocr: ocrConfigSchema.partial().optional(),
 });
 
 export const createFieldSchema = z.object({
@@ -89,10 +79,9 @@ export type FieldConfig = z.infer<typeof fieldConfigSchema>;
 
 // 필드 생성 시 유형별 기본값을 채운다 (PRD §4.1~4.3 "기본 권장값").
 export function defaultConfigForType(type: FieldType, overrides: FieldConfig = {}): FieldConfig {
-  const ocr = ocrConfigSchema.parse(overrides.ocr ?? {});
-  if (type === "text") return { text: textConfigSchema.parse(overrides.text ?? {}), ocr };
-  if (type === "number") return { number: numberConfigSchema.parse(overrides.number ?? {}), ocr };
-  return { check: checkConfigSchema.parse(overrides.check ?? {}), ocr };
+  if (type === "text") return { text: textConfigSchema.parse(overrides.text ?? {}) };
+  if (type === "number") return { number: numberConfigSchema.parse(overrides.number ?? {}) };
+  return { check: checkConfigSchema.parse(overrides.check ?? {}) };
 }
 
 export const createTemplateSchema = z.object({
