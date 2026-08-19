@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { TemplateDTO } from "@/types";
 
 type Org = { id: string; name: string };
 type TemplateRow = TemplateDTO & { org: { name: string } };
 
 export default function TemplatesPage() {
+  const router = useRouter();
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [name, setName] = useState("");
@@ -47,9 +49,22 @@ export default function TemplatesPage() {
     }
   }
 
+  async function printDocument(templateId: string) {
+    const res = await fetch(`/api/templates/${templateId}/documents`, { method: "POST" });
+    if (res.ok) {
+      const doc = await res.json();
+      router.push(`/documents/${doc.id}`);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-3xl p-8">
-      <h1 className="text-xl font-semibold mb-6">양식 관리</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-xl font-semibold">양식 관리</h1>
+        <Link href="/documents" className="text-sm text-blue-600 hover:underline">
+          문서 조회 →
+        </Link>
+      </div>
 
       <div className="flex gap-2 mb-8">
         <select
@@ -90,6 +105,14 @@ export default function TemplatesPage() {
                 {t.org.name} · {t.status} · {t.printable ? "인쇄 가능" : (t.printableReason ?? "편집 중")}
               </div>
             </div>
+            {t.printable && (
+              <button
+                className="text-sm border rounded px-3 py-1"
+                onClick={() => printDocument(t.id)}
+              >
+                문서 만들기 (인쇄)
+              </button>
+            )}
           </li>
         ))}
         {templates.length === 0 && (

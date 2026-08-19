@@ -122,3 +122,15 @@ export const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(["draft", "active", "retired"]).optional(),
 });
+
+export const importDocumentSchema = z.object({
+  pageImages: z.array(z.string()).min(1),
+});
+
+export const updateFieldValueSchema = z.object({
+  finalValue: z.string().nullable(),
+});
+
+export const reopenDocumentSchema = z.object({
+  reason: z.string().min(1),
+});

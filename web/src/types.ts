@@ -114,6 +114,45 @@ export type TemplateDetailResponse = {
   repeatGroups: RepeatGroupDTO[];
 };
 
+export type DocumentStatus = "printed" | "received" | "processing" | "review_required" | "confirmed" | "error";
+
+export type DocumentDTO = {
+  id: string;
+  templateVersionId: string;
+  orgId: string;
+  ncode: string | null;
+  status: DocumentStatus;
+  pageImages: string[];
+  createdAt: string;
+  confirmedAt: string | null;
+};
+
+export type DocumentListItemDTO = DocumentDTO & {
+  templateVersion: { template: { name: string } };
+};
+
+export type FieldValueDTO = {
+  id: string;
+  documentId: string;
+  fieldId: string | null;
+  field: { id: string; label: string; dataKey: string; required: boolean } | null;
+  repeatGroupId: string | null;
+  repeatColumnId: string | null;
+  repeatColumn: { id: string; label: string; dataKey: string; required: boolean } | null;
+  rowIndex: number | null;
+  rawOcrValue: string | null;
+  normalizedValue: string | null;
+  finalValue: string | null;
+  valueSource: "ai" | "user" | "stroke_rule" | "empty_rule" | null;
+  reviewStatus: "pending" | "needs_review" | "confirmed";
+  reviewReasons: string[];
+};
+
+export type DocumentDetailDTO = DocumentDTO & {
+  templateVersion: { template: { name: string } };
+  fieldValues: FieldValueDTO[];
+};
+
 export type FieldIssue = {
   code: "overlap" | "duplicate_key";
   fieldIds: string[];
