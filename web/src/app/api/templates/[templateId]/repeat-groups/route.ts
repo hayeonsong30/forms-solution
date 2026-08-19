@@ -15,7 +15,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
   }
 
   try {
-    const { version } = await getCurrentVersion(templateId);
+    const { template, version } = await getCurrentVersion(templateId);
+    if (template.status !== "draft") {
+      return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    }
     const fields = await prisma.field.findMany({
       where: { id: { in: parsed.data.fieldIds }, templateVersionId: version.id },
     });

@@ -40,6 +40,20 @@ export async function loadValidationInput(templateVersionId: string) {
   };
 }
 
+// PRD_폼솔루션 §7.1.1: "편집 완료하면...PDF, 필드, 데이터 키, 영역 좌표를 더 이상 수정할 수 없다."
+// draft가 아닌 템플릿(활성/폐기)에 속한 필드·반복행은 서버에서도 수정을 막는다.
+export async function assertTemplateEditableByVersion(templateVersionId: string): Promise<void> {
+  const version = await prisma.templateVersion.findUnique({
+    where: { id: templateVersionId },
+    include: { template: { select: { status: true } } },
+  });
+  if (version && version.template.status !== "draft") {
+    throw new TemplateLockedError();
+  }
+}
+
+export class TemplateLockedError extends Error {}
+
 export async function getCurrentVersion(templateId: string) {
   const template = await prisma.template.findUnique({ where: { id: templateId } });
   if (!template) throw new NotFoundError("template not found");

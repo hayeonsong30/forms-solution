@@ -126,6 +126,8 @@ model Template {
   printable        Boolean        @default(false)
   printableReason  String?        @map("printable_reason")
   currentVersionId String?        @map("current_version_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
   versions TemplateVersion[] @relation("TemplateVersions")
 

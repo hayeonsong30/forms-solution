@@ -60,6 +60,8 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   }, [data?.version.hasPdf, loadPdfBuffer]);
 
   const hasPdf = data?.version.hasPdf ?? false;
+  // PRD_폼솔루션 §7.1.1: 편집 완료(draft가 아님) 후에는 PDF·필드·좌표를 수정할 수 없다.
+  const readOnly = data ? data.template.status !== "draft" : false;
   const allFields = data?.fields ?? [];
   const fields = allFields.filter((f) => f.pageNo === pageNo);
   const repeatGroups = (data?.repeatGroups ?? []).filter((g) => g.pageNo === pageNo);
@@ -243,7 +245,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
 
   function startGroupDrag(group: RepeatGroupDTO, e: React.PointerEvent) {
     e.stopPropagation();
-    if (!canvasRef.current) return;
+    if (readOnly || !canvasRef.current) return;
     selectGroup(group.id);
     const rect = canvasRef.current.getBoundingClientRect();
     const startX = e.clientX;
@@ -397,13 +399,14 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       if (!e.shiftKey) setMultiSelectIds([]);
       return;
     }
+    if (readOnly) return;
     const pt = computeCanvasPoint(e.clientX, e.clientY);
     if (pt) createField(pt.x, pt.y, tool.type);
   }
 
   function handleCanvasDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
-    if (!dragType) return;
+    if (!dragType || readOnly) return;
     const pt = computeCanvasPoint(e.clientX, e.clientY);
     if (pt) createField(pt.x, pt.y, dragType);
     setDragType(null);
@@ -411,7 +414,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
 
   function startDrag(field: FieldDTO, e: React.PointerEvent, mode: "move" | "resize") {
     e.stopPropagation();
-    if (field.locked || !canvasRef.current) return;
+    if (readOnly || field.locked || !canvasRef.current) return;
     setSelectedId(field.id);
     const rect = canvasRef.current.getBoundingClientRect();
     const startX = e.clientX;
@@ -509,25 +512,32 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
         <Button onClick={() => stack.redo()} disabled={!stack.canRedo} title="다시 실행 (Cmd/Ctrl+Shift+Z)">
           ↷
         </Button>
-        {multiSelectIds.length > 0 && (
+        {!readOnly && multiSelectIds.length > 0 && (
           <button className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer" onClick={() => setGroupModalOpen(true)}>
             반복행으로 묶기 ({multiSelectIds.length})
           </button>
         )}
-        <button
-          className="text-sm border border-violet-300 text-violet-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer disabled:opacity-40"
-          onClick={runAiDetection}
-          disabled={!hasPdf || aiBusy}
-        >
-          {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
-        </button>
+        {!readOnly && (
+          <button
+            className="text-sm border border-violet-300 text-violet-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer disabled:opacity-40"
+            onClick={runAiDetection}
+            disabled={!hasPdf || aiBusy}
+          >
+            {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
+          </button>
+        )}
         <div className="flex-1" />
-        <Button onClick={runValidate}>검사</Button>
-        <Button variant="primary" onClick={activate}>
-          인쇄 가능으로 전환
-        </Button>
+        {!readOnly && (
+          <>
+            <Button onClick={runValidate}>검사</Button>
+            <Button variant="primary" onClick={activate}>
+              인쇄 가능으로 전환
+            </Button>
+          </>
+        )}
         <Badge tone={data.template.printable ? "green" : "amber"}>
           {data.template.printable ? "인쇄 가능" : (data.template.printableReason ?? "편집 중")}
+          {readOnly ? " · 조회 전용" : ""}
         </Badge>
       </header>
 
@@ -542,21 +552,24 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
 
       <div className="flex-1 flex min-h-0">
         <LeftPanel
-          disabled={!hasPdf}
+          disabled={!hasPdf || readOnly}
           fields={fields}
           repeatGroups={repeatGroups}
           selectedId={selectedId}
           selectedGroupId={selectedGroupId}
           onSelectField={(id) => selectField(id)}
           onSelectGroup={selectGroup}
-          onToggleHidden={(f) => runFieldPatchCommand(f, { hidden: !f.hidden }, { hidden: f.hidden })}
-          onToggleLocked={(f) => runFieldPatchCommand(f, { locked: !f.locked }, { locked: f.locked })}
-          onDeleteField={deleteField}
-          onArmAdd={(type) => setTool(type ? { mode: "add", type } : { mode: "select" })}
+          onToggleHidden={(f) => (readOnly ? undefined : runFieldPatchCommand(f, { hidden: !f.hidden }, { hidden: f.hidden }))}
+          onToggleLocked={(f) => (readOnly ? undefined : runFieldPatchCommand(f, { locked: !f.locked }, { locked: f.locked }))}
+          onDeleteField={(f) => (readOnly ? undefined : deleteField(f))}
+          onArmAdd={(type) => !readOnly && setTool(type ? { mode: "add", type } : { mode: "select" })}
           armedType={tool.mode === "add" ? tool.type : null}
           onDragCardStart={setDragType}
-          onGroupCardClick={() => (multiSelectIds.length > 0 ? setGroupModalOpen(true) : setActionError("먼저 첫 행 필드를 다중 선택하세요 (Shift+클릭)."))}
-          onReplacePdf={uploadPdf}
+          onGroupCardClick={() =>
+            !readOnly &&
+            (multiSelectIds.length > 0 ? setGroupModalOpen(true) : setActionError("먼저 첫 행 필드를 다중 선택하세요 (Shift+클릭)."))
+          }
+          onReplacePdf={(file) => !readOnly && uploadPdf(file)}
         />
 
         {!hasPdf ? (
@@ -648,7 +661,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           </div>
         )}
 
-        <aside className="w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto">
+        <aside className={`w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto ${readOnly ? "pointer-events-none opacity-60" : ""}`}>
           {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">필드를 선택하세요.</p>}
           {selectedGroup && (
             <GroupPropertiesPanel

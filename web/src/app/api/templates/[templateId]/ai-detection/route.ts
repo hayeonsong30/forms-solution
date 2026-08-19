@@ -20,7 +20,10 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
   if (!image) return Response.json({ error: "INVALID_IMAGE" }, { status: 400 });
 
   try {
-    const { version } = await getCurrentVersion(templateId);
+    const { template, version } = await getCurrentVersion(templateId);
+    if (template.status !== "draft") {
+      return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    }
     if (!version.pdfData) {
       return Response.json({ error: "PDF_REQUIRED" }, { status: 409 });
     }

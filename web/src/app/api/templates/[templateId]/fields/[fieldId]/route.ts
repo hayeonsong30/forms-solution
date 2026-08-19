@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { updateFieldSchema, defaultConfigForType, type FieldConfig } from "@/lib/schemas";
 import { slugifyDataKey, withUniqueSuffix } from "@/lib/dataKey";
-import { existingDataKeys } from "@/lib/template";
+import { assertTemplateEditableByVersion, existingDataKeys, TemplateLockedError } from "@/lib/template";
 
 export async function PATCH(
   req: Request,
@@ -17,6 +17,12 @@ export async function PATCH(
 
   const current = await prisma.field.findUnique({ where: { id: fieldId } });
   if (!current) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+  try {
+    await assertTemplateEditableByVersion(current.templateVersionId);
+  } catch (e) {
+    if (e instanceof TemplateLockedError) return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    throw e;
+  }
   if (current.locked && (parsed.data.box || parsed.data.dataKey || parsed.data.type)) {
     return Response.json({ error: "FIELD_LOCKED" }, { status: 409 });
   }
@@ -67,6 +73,12 @@ export async function DELETE(
   const { fieldId } = await ctx.params;
   const current = await prisma.field.findUnique({ where: { id: fieldId } });
   if (!current) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+  try {
+    await assertTemplateEditableByVersion(current.templateVersionId);
+  } catch (e) {
+    if (e instanceof TemplateLockedError) return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    throw e;
+  }
   if (current.locked) {
     return Response.json({ error: "FIELD_LOCKED" }, { status: 409 });
   }

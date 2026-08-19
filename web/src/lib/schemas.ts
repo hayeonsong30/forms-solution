@@ -121,6 +121,8 @@ export const createTemplateSchema = z.object({
 export const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(["draft", "active", "retired"]).optional(),
+  // PRD_폼솔루션 §7.1.1: 완료된 양식은 사용자가 Printable ↔ Not Printable(사용자 중지)을 직접 전환할 수 있다.
+  printable: z.boolean().optional(),
 });
 
 export const importDocumentSchema = z.object({

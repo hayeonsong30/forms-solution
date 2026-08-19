@@ -65,6 +65,14 @@ export type TemplateDTO = {
   printable: boolean;
   printableReason: string | null;
   currentVersionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TemplateListItemDTO = TemplateDTO & {
+  org: { name: string };
+  pageCount: number;
+  fieldCount: number;
 };
 
 export type TemplateVersionDTO = {
@@ -128,7 +136,9 @@ export type DocumentDTO = {
 };
 
 export type DocumentListItemDTO = DocumentDTO & {
-  templateVersion: { template: { name: string } };
+  templateVersion: { pageCount: number; template: { name: string } };
+  needsReviewCount: number;
+  repeatRowCount: number;
 };
 
 export type FieldValueDTO = {

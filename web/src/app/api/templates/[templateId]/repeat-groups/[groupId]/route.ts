@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { updateRepeatGroupSchema } from "@/lib/schemas";
 import { slugifyDataKey, withUniqueSuffix } from "@/lib/dataKey";
+import { assertTemplateEditableByVersion, TemplateLockedError } from "@/lib/template";
 
 export async function PATCH(
   req: Request,
@@ -16,6 +17,12 @@ export async function PATCH(
 
   const current = await prisma.repeatGroup.findUnique({ where: { id: groupId } });
   if (!current) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+  try {
+    await assertTemplateEditableByVersion(current.templateVersionId);
+  } catch (e) {
+    if (e instanceof TemplateLockedError) return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    throw e;
+  }
 
   const { area, rowHeight, maxRows, dataKey, ...rest } = parsed.data;
 
@@ -85,6 +92,12 @@ export async function DELETE(
     include: { columns: { orderBy: { orderNo: "asc" } } },
   });
   if (!group) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
+  try {
+    await assertTemplateEditableByVersion(group.templateVersionId);
+  } catch (e) {
+    if (e instanceof TemplateLockedError) return Response.json({ error: "TEMPLATE_LOCKED" }, { status: 409 });
+    throw e;
+  }
 
   const existingKeys = new Set(
     (await prisma.field.findMany({ where: { templateVersionId: group.templateVersionId }, select: { dataKey: true } })).map(
