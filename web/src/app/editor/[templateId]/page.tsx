@@ -11,6 +11,7 @@ import type {
   TemplateDetailResponse,
   TextConfig,
 } from "@/types";
+import { Badge, Button } from "@/components/ui";
 
 const PAGE_RATIO = 297 / 210; // A4 세로 비율 (h/w)
 const DEFAULT_BOX = { w: 0.16, h: 0.04 };
@@ -314,13 +315,13 @@ export default function EditorPage({
     window.addEventListener("pointerup", onUp);
   }
 
-  if (!data) return <main className="p-8 text-sm text-gray-500">불러오는 중…</main>;
+  if (!data) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
 
   return (
-    <main className="flex h-screen">
-      <div className="flex-1 flex flex-col">
-        <header className="border-b px-4 py-2 flex items-center gap-2">
-          <h1 className="font-semibold mr-4">{data.template.name}</h1>
+    <main className="flex h-full">
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="bg-white border-b border-[var(--color-border)] px-4 py-2.5 flex items-center gap-2">
+          <h1 className="font-semibold text-sm mr-2 truncate max-w-48">{data.template.name}</h1>
           <ToolButton active={tool.mode === "select"} onClick={() => setTool({ mode: "select" })}>
             선택
           </ToolButton>
@@ -344,26 +345,24 @@ export default function EditorPage({
           </ToolButton>
           {multiSelectIds.length > 0 && (
             <button
-              className="text-sm bg-teal-600 text-white rounded px-3 py-1"
+              className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer"
               onClick={() => setGroupModalOpen(true)}
             >
               반복행으로 묶기 ({multiSelectIds.length})
             </button>
           )}
-          <label className="text-sm border border-violet-300 text-violet-700 rounded px-3 py-1 cursor-pointer">
+          <label className="text-sm border border-violet-300 text-violet-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer">
             {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
             <input type="file" accept="image/*" className="hidden" onChange={handleAiFile} disabled={aiBusy} />
           </label>
           <div className="flex-1" />
-          <button className="text-sm border rounded px-3 py-1" onClick={runValidate}>
-            검사
-          </button>
-          <button className="text-sm bg-blue-600 text-white rounded px-3 py-1" onClick={activate}>
+          <Button onClick={runValidate}>검사</Button>
+          <Button variant="primary" onClick={activate}>
             인쇄 가능으로 전환
-          </button>
-          <span className="text-xs text-gray-500 ml-2">
-            {data.template.printable ? "✅ 인쇄 가능" : `⏸ ${data.template.printableReason ?? "편집 중"}`}
-          </span>
+          </Button>
+          <Badge tone={data.template.printable ? "green" : "amber"}>
+            {data.template.printable ? "인쇄 가능" : (data.template.printableReason ?? "편집 중")}
+          </Badge>
         </header>
 
         {(issues.length > 0 || actionError) && (
@@ -375,7 +374,7 @@ export default function EditorPage({
           </div>
         )}
 
-        <div className="flex-1 overflow-auto bg-gray-100 p-8">
+        <div className="flex-1 overflow-auto bg-slate-100 p-8">
           <div
             ref={canvasRef}
             onClick={handleCanvasClick}
@@ -419,7 +418,7 @@ export default function EditorPage({
                   multiSelectIds.includes(f.id)
                     ? "border-amber-500 bg-amber-50/70"
                     : f.id === selectedId
-                      ? "border-blue-600 bg-blue-50/70"
+                      ? "border-[var(--color-brand-600)] bg-[var(--color-brand-50)]/70"
                       : f.status === "suggested"
                         ? "border-dashed border-violet-500 bg-violet-50/50"
                         : "border-slate-400 bg-white/60"
@@ -435,7 +434,7 @@ export default function EditorPage({
                 {f.id === selectedId && !f.locked && (
                   <div
                     onPointerDown={(e) => startDrag(f, e, "resize")}
-                    className="absolute -right-1 -bottom-1 w-3 h-3 bg-blue-600 cursor-se-resize"
+                    className="absolute -right-1 -bottom-1 w-3 h-3 bg-[var(--color-brand-600)] cursor-se-resize"
                   />
                 )}
               </div>
@@ -444,14 +443,14 @@ export default function EditorPage({
         </div>
       </div>
 
-      <aside className="w-80 border-l overflow-y-auto">
-        {!selected && !selectedGroup && <p className="p-4 text-sm text-gray-500">필드를 선택하세요.</p>}
+      <aside className="w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto">
+        {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">필드를 선택하세요.</p>}
         {selectedGroup && (
           <div className="divide-y">
             <Section title="반복행 속성">
               <Field label="그룹명">
                 <input
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selectedGroup.label}
                   onChange={(e) => patchLocalGroup(selectedGroup.id, { label: e.target.value })}
                   onBlur={() => saveGroup(selectedGroup.id, { label: selectedGroup.label })}
@@ -459,7 +458,7 @@ export default function EditorPage({
               </Field>
               <Field label="그룹 데이터 키">
                 <input
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selectedGroup.dataKey}
                   onChange={(e) => patchLocalGroup(selectedGroup.id, { dataKey: e.target.value })}
                   onBlur={() => saveGroup(selectedGroup.id, { dataKey: selectedGroup.dataKey })}
@@ -469,7 +468,7 @@ export default function EditorPage({
                 <input
                   type="number"
                   min={1}
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selectedGroup.maxRows}
                   onChange={(e) => patchLocalGroup(selectedGroup.id, { maxRows: Number(e.target.value) })}
                   onBlur={() => saveGroup(selectedGroup.id, { maxRows: selectedGroup.maxRows })}
@@ -477,7 +476,7 @@ export default function EditorPage({
               </Field>
               <Field label="빈 행 처리">
                 <select
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selectedGroup.blankRowPolicy}
                   onChange={(e) => {
                     const blankRowPolicy = e.target.value as "exclude" | "include";
@@ -517,7 +516,7 @@ export default function EditorPage({
                 {selectedGroup.columns.map((c) => (
                   <li key={c.id} className="text-xs border rounded px-2 py-1 flex justify-between">
                     <span>{c.label}</span>
-                    <span className="text-gray-400">
+                    <span className="text-slate-400">
                       {c.dataKey} · {c.type}
                     </span>
                   </li>
@@ -536,7 +535,7 @@ export default function EditorPage({
             <Section title="기본 정보">
               <Field label="필드명">
                 <input
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selected.label}
                   disabled={selected.locked}
                   onChange={(e) => patchLocalField(selected.id, { label: e.target.value })}
@@ -545,17 +544,17 @@ export default function EditorPage({
               </Field>
               <Field label="데이터 키">
                 <input
-                  className="border rounded px-2 py-1 w-full disabled:bg-gray-50 disabled:text-gray-400"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)] disabled:bg-slate-50 disabled:text-slate-400"
                   value={selected.dataKey}
                   disabled={selected.locked}
                   onChange={(e) => patchLocalField(selected.id, { dataKey: e.target.value })}
                   onBlur={() => saveField(selected.id, { dataKey: selected.dataKey })}
                 />
-                <p className="text-[11px] text-gray-400 mt-1">편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.</p>
+                <p className="text-[11px] text-slate-400 mt-1">편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.</p>
               </Field>
               <Field label="데이터 유형">
                 <select
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selected.type}
                   disabled={selected.locked}
                   onChange={(e) => {
@@ -570,7 +569,7 @@ export default function EditorPage({
               </Field>
               <Field label="설명">
                 <textarea
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   rows={2}
                   value={selected.description ?? ""}
                   onChange={(e) => patchLocalField(selected.id, { description: e.target.value })}
@@ -660,7 +659,7 @@ export default function EditorPage({
                 <input
                   type="number"
                   min={1}
-                  className="border rounded px-2 py-1 w-full"
+                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                   value={selected.pageNo}
                   onChange={(e) => patchLocalField(selected.id, { pageNo: Number(e.target.value) })}
                   onBlur={() => saveField(selected.id, { pageNo: selected.pageNo })}
@@ -683,7 +682,7 @@ export default function EditorPage({
               <Section title="검증">
                 <Field label="교차 검증 (동시 true 불가 대상)">
                   <select
-                    className="border rounded px-2 py-1 w-full"
+                    className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
                     value={selected.config.check?.exclusiveWithFieldId ?? ""}
                     onChange={(e) => patchConfig(selected, "check", { exclusiveWithFieldId: e.target.value || undefined })}
                   >
@@ -694,7 +693,7 @@ export default function EditorPage({
                       </option>
                     ))}
                   </select>
-                  <p className="text-[11px] text-gray-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
                 </Field>
               </Section>
             )}
@@ -727,7 +726,11 @@ function ToolButton({ active, onClick, children }: { active: boolean; onClick: (
   return (
     <button
       onClick={onClick}
-      className={`text-sm rounded px-3 py-1 border ${active ? "bg-slate-800 text-white border-slate-800" : "border-gray-300"}`}
+      className={`text-sm rounded-lg px-3 py-1.5 font-medium border cursor-pointer ${
+        active
+          ? "bg-[var(--color-brand-600)] text-white border-[var(--color-brand-600)]"
+          : "border-[var(--color-border)] hover:bg-slate-50"
+      }`}
     >
       {children}
     </button>
@@ -754,7 +757,7 @@ function Section({
         onClick={collapsible ? onToggle : undefined}
       >
         {title}
-        {collapsible && <span className="text-gray-400">{collapsed ? "▸" : "▾"}</span>}
+        {collapsible && <span className="text-slate-400">{collapsed ? "▸" : "▾"}</span>}
       </button>
       {(!collapsible || !collapsed) && <div className="space-y-3 text-sm">{children}</div>}
     </div>
@@ -764,7 +767,7 @@ function Section({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs text-gray-500 mb-1">{label}</div>
+      <div className="text-xs text-slate-400 mb-1">{label}</div>
       {children}
     </div>
   );
@@ -781,7 +784,7 @@ function PercentField({ label, value, onCommit }: { label: string; value: number
       <input
         type="number"
         step={0.1}
-        className="border rounded px-2 py-1 w-full"
+        className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
         onBlur={() => {
@@ -799,7 +802,7 @@ function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p
     <>
       <Field label="작성 형태">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.writingMode ?? "single"}
           onChange={(e) => onChange({ writingMode: e.target.value as TextConfig["writingMode"] })}
         >
@@ -809,7 +812,7 @@ function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p
       </Field>
       <Field label="인식 언어">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.language ?? "ja"}
           onChange={(e) => onChange({ language: e.target.value as TextConfig["language"] })}
         >
@@ -821,7 +824,7 @@ function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p
       </Field>
       <Field label="문자 정책">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.charPolicy ?? "all"}
           onChange={(e) => onChange({ charPolicy: e.target.value as TextConfig["charPolicy"] })}
         >
@@ -834,7 +837,7 @@ function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p
       {v.charPolicy === "custom_pattern" && (
         <Field label="사용자 패턴 (정규식)">
           <input
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             defaultValue={v.customPattern ?? ""}
             onBlur={(e) => onChange({ customPattern: e.target.value })}
           />
@@ -844,7 +847,7 @@ function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p
         <input
           type="number"
           min={1}
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           defaultValue={v.maxLength ?? ""}
           onBlur={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : undefined })}
         />
@@ -869,7 +872,7 @@ function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange
     <>
       <Field label="숫자 형식">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.numberFormat ?? "integer"}
           onChange={(e) => onChange({ numberFormat: e.target.value as NumberConfig["numberFormat"] })}
         >
@@ -883,7 +886,7 @@ function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange
             type="number"
             min={0}
             max={6}
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             defaultValue={v.decimalPlaces ?? 0}
             onBlur={(e) => onChange({ decimalPlaces: Number(e.target.value) })}
           />
@@ -897,7 +900,7 @@ function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange
         <Field label="최소">
           <input
             type="number"
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             defaultValue={v.min ?? ""}
             onBlur={(e) => onChange({ min: e.target.value ? Number(e.target.value) : undefined })}
           />
@@ -905,7 +908,7 @@ function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange
         <Field label="최대">
           <input
             type="number"
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             defaultValue={v.max ?? ""}
             onBlur={(e) => onChange({ max: e.target.value ? Number(e.target.value) : undefined })}
           />
@@ -913,7 +916,7 @@ function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange
       </div>
       <Field label="단위">
         <input
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           placeholder="예: kg, 個"
           defaultValue={v.unit ?? ""}
           onBlur={(e) => onChange({ unit: e.target.value || undefined })}
@@ -949,7 +952,7 @@ function CheckConfigPanel({
     <>
       <Field label="판정 방식">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.mode ?? "symbol_classification"}
           onChange={(e) => onChange({ mode: e.target.value as CheckConfig["mode"] })}
         >
@@ -959,7 +962,7 @@ function CheckConfigPanel({
       </Field>
       <Field label="true 표시 (쉼표 구분)">
         <input
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           defaultValue={(v.trueMarks ?? ["CHECK", "V"]).join(", ")}
           onBlur={(e) => onChange({ trueMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
         />
@@ -967,7 +970,7 @@ function CheckConfigPanel({
       {v.mode === "symbol_classification" && (
         <Field label="false 표시 (쉼표 구분)">
           <input
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             defaultValue={(v.falseMarks ?? ["X"]).join(", ")}
             onBlur={(e) => onChange({ falseMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
           />
@@ -975,7 +978,7 @@ function CheckConfigPanel({
       )}
       <Field label="빈칸 처리">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.blankValue ?? "null"}
           onChange={(e) => onChange({ blankValue: e.target.value as CheckConfig["blankValue"] })}
         >
@@ -986,7 +989,7 @@ function CheckConfigPanel({
       </Field>
       <Field label="애매한 표시">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.ambiguousPolicy ?? "always_review"}
           onChange={(e) => onChange({ ambiguousPolicy: e.target.value as CheckConfig["ambiguousPolicy"] })}
         >
@@ -996,7 +999,7 @@ function CheckConfigPanel({
       </Field>
       <Field label="선택 영역">
         <select
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
           value={v.regionMode ?? "box"}
           onChange={(e) => onChange({ regionMode: e.target.value as CheckConfig["regionMode"] })}
         >
@@ -1005,7 +1008,7 @@ function CheckConfigPanel({
         </select>
       </Field>
       {otherCheckFields.length === 0 && (
-        <p className="text-[11px] text-gray-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
+        <p className="text-[11px] text-slate-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
       )}
     </>
   );
@@ -1029,22 +1032,22 @@ function CreateRepeatGroupModal({
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
       <div className="bg-white rounded shadow-lg w-96 p-5 space-y-3">
         <h2 className="font-medium">반복행으로 묶기</h2>
-        <p className="text-xs text-gray-500">선택한 필드 {fieldCount}개를 첫 행으로 하는 반복행 그룹을 만듭니다.</p>
+        <p className="text-xs text-slate-400">선택한 필드 {fieldCount}개를 첫 행으로 하는 반복행 그룹을 만듭니다.</p>
         <Field label="그룹명">
-          <input className="border rounded px-2 py-1 w-full" value={label} onChange={(e) => setLabel(e.target.value)} />
+          <input className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]" value={label} onChange={(e) => setLabel(e.target.value)} />
         </Field>
         <Field label="최대 행 수">
           <input
             type="number"
             min={1}
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             value={maxRows}
             onChange={(e) => setMaxRows(Number(e.target.value))}
           />
         </Field>
         <Field label="빈 행 처리">
           <select
-            className="border rounded px-2 py-1 w-full"
+            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
             value={blankRowPolicy}
             onChange={(e) => setBlankRowPolicy(e.target.value as "exclude" | "include")}
           >

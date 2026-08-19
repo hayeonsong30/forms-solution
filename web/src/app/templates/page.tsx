@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TemplateDTO } from "@/types";
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Select } from "@/components/ui";
 
 type Org = { id: string; name: string };
 type TemplateRow = TemplateDTO & { org: { name: string } };
@@ -58,67 +59,62 @@ export default function TemplatesPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">양식 관리</h1>
-        <Link href="/documents" className="text-sm text-blue-600 hover:underline">
-          문서 조회 →
-        </Link>
-      </div>
+    <div className="mx-auto max-w-3xl px-8 py-8">
+      <PageHeader title="양식 관리" />
 
-      <div className="flex gap-2 mb-8">
-        <select
-          className="border rounded px-2 py-1"
-          value={orgId}
-          onChange={(e) => setOrgId(e.target.value)}
-        >
-          {orgs.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.name}
-            </option>
-          ))}
-        </select>
-        <input
-          className="border rounded px-2 py-1 flex-1"
-          placeholder="새 양식 이름"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && createTemplate()}
-        />
-        <button
-          className="bg-blue-600 text-white rounded px-4 py-1 disabled:opacity-50"
-          onClick={createTemplate}
-          disabled={creating}
-        >
-          만들기
-        </button>
-      </div>
+      <Card className="p-4 mb-6">
+        <div className="flex gap-2">
+          <Select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="shrink-0">
+            {orgs.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            className="flex-1"
+            placeholder="새 양식 이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && createTemplate()}
+          />
+          <Button variant="primary" onClick={createTemplate} disabled={creating}>
+            만들기
+          </Button>
+        </div>
+      </Card>
 
-      <ul className="divide-y border rounded">
-        {templates.map((t) => (
-          <li key={t.id} className="flex items-center justify-between px-4 py-3">
-            <div>
-              <Link href={`/editor/${t.id}`} className="font-medium hover:underline">
-                {t.name}
-              </Link>
-              <div className="text-xs text-gray-500">
-                {t.org.name} · {t.status} · {t.printable ? "인쇄 가능" : (t.printableReason ?? "편집 중")}
+      <Card>
+        <ul className="divide-y divide-[var(--color-border)]">
+          {templates.map((t) => (
+            <li key={t.id} className="flex items-center justify-between px-4 py-3.5">
+              <div>
+                <Link href={`/editor/${t.id}`} className="font-medium text-sm hover:text-[var(--color-brand-600)]">
+                  {t.name}
+                </Link>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-slate-400">{t.org.name}</span>
+                  <StatusBadge template={t} />
+                </div>
               </div>
-            </div>
-            {t.printable && (
-              <button
-                className="text-sm border rounded px-3 py-1"
-                onClick={() => printDocument(t.id)}
-              >
-                문서 만들기 (인쇄)
-              </button>
-            )}
-          </li>
-        ))}
-        {templates.length === 0 && (
-          <li className="px-4 py-6 text-sm text-gray-500">아직 양식이 없습니다.</li>
-        )}
-      </ul>
-    </main>
+              {t.printable && (
+                <Button onClick={() => printDocument(t.id)}>문서 만들기 (인쇄)</Button>
+              )}
+            </li>
+          ))}
+          {templates.length === 0 && (
+            <li>
+              <EmptyState>아직 양식이 없습니다.</EmptyState>
+            </li>
+          )}
+        </ul>
+      </Card>
+    </div>
   );
+}
+
+function StatusBadge({ template }: { template: TemplateRow }) {
+  if (template.printable) return <Badge tone="green">인쇄 가능</Badge>;
+  if (template.printableReason) return <Badge tone="amber">{template.printableReason}</Badge>;
+  return <Badge tone="slate">편집 중</Badge>;
 }

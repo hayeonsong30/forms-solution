@@ -3,14 +3,15 @@
 import { use, useCallback, useEffect, useState } from "react";
 import type { DocumentDetailDTO, DocumentStatus, FieldType } from "@/types";
 import { downloadExport } from "@/lib/downloadExport";
+import { Badge, Button, ButtonLabel, Card, Input, PageHeader, Select } from "@/components/ui";
 
-const STATUS_LABEL: Record<DocumentStatus, string> = {
-  printed: "인쇄됨",
-  received: "필기 수신",
-  processing: "처리 중",
-  review_required: "검수 필요",
-  confirmed: "확정",
-  error: "오류",
+const STATUS: Record<DocumentStatus, { label: string; tone: "amber" | "green" | "slate" | "red" | "brand" }> = {
+  printed: { label: "인쇄됨", tone: "slate" },
+  received: { label: "필기 수신", tone: "slate" },
+  processing: { label: "처리 중", tone: "brand" },
+  review_required: { label: "검수 필요", tone: "amber" },
+  confirmed: { label: "확정", tone: "green" },
+  error: { label: "오류", tone: "red" },
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -80,94 +81,85 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
     await load();
   }
 
-  if (!doc) return <main className="p-8 text-sm text-gray-500">불러오는 중…</main>;
+  if (!doc) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
 
+  const status = STATUS[doc.status];
   const unresolvedCount = doc.fieldValues.filter((v) => v.reviewStatus === "needs_review").length;
 
   return (
-    <main className="mx-auto max-w-4xl p-8 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">{doc.templateVersion.template.name}</h1>
-        <p className="text-sm text-gray-500">
-          {doc.ncode} · 상태: <span className="font-medium">{STATUS_LABEL[doc.status]}</span>
-          {doc.status === "review_required" && unresolvedCount > 0 && (
-            <span className="text-amber-600"> · 확인 필요 {unresolvedCount}건</span>
-          )}
-        </p>
-      </div>
-
-      {actionError && <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-sm text-red-700">{actionError}</div>}
-
-      <div className="flex gap-2 items-center">
-        {doc.status === "printed" && (
-          <label className="text-sm bg-blue-600 text-white rounded px-3 py-1 cursor-pointer">
-            필기 이미지 업로드 (SDK 연동 전 — 파일 직접 선택)
-            <input type="file" accept="image/*" className="hidden" onChange={importFile} disabled={busy !== null} />
-          </label>
-        )}
-        {(doc.status === "received" || doc.status === "error") && (
-          <button
-            className="text-sm bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
-            onClick={() => runAction("process")}
-            disabled={busy !== null}
-          >
-            {busy === "process" ? "AI 처리 중… (최대 2분)" : "처리 실행 (Gemini OCR)"}
-          </button>
-        )}
-        {doc.status === "review_required" && (
-          <button
-            className="text-sm bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
-            onClick={() => runAction("confirm")}
-            disabled={busy !== null}
-          >
-            확정
-          </button>
-        )}
-        {doc.status === "confirmed" && (
+    <div className="mx-auto max-w-4xl px-8 py-8 space-y-6">
+      <PageHeader
+        title={doc.templateVersion.template.name}
+        actions={
           <>
-            <button className="text-sm border rounded px-3 py-1" onClick={() => setShowReopen(true)}>
-              재검수 열기
-            </button>
-            <button
-              className="text-sm border rounded px-3 py-1 disabled:opacity-50"
-              disabled={busy !== null}
-              onClick={async () => {
-                setBusy("export-csv");
-                const err = await downloadExport("csv", [documentId]);
-                if (err) setActionError(err);
-                setBusy(null);
-              }}
-            >
-              CSV 다운로드
-            </button>
-            <button
-              className="text-sm border rounded px-3 py-1 disabled:opacity-50"
-              disabled={busy !== null}
-              onClick={async () => {
-                setBusy("export-excel");
-                const err = await downloadExport("excel", [documentId]);
-                if (err) setActionError(err);
-                setBusy(null);
-              }}
-            >
-              Excel 다운로드
-            </button>
+            {doc.status === "printed" && (
+              <ButtonLabel variant="primary">
+                필기 이미지 업로드
+                <input type="file" accept="image/*" className="hidden" onChange={importFile} disabled={busy !== null} />
+              </ButtonLabel>
+            )}
+            {(doc.status === "received" || doc.status === "error") && (
+              <Button variant="primary" onClick={() => runAction("process")} disabled={busy !== null}>
+                {busy === "process" ? "AI 처리 중… (최대 2분)" : "처리 실행 (Gemini OCR)"}
+              </Button>
+            )}
+            {doc.status === "review_required" && (
+              <Button variant="primary" onClick={() => runAction("confirm")} disabled={busy !== null}>
+                확정
+              </Button>
+            )}
+            {doc.status === "confirmed" && (
+              <>
+                <Button onClick={() => setShowReopen(true)}>재검수 열기</Button>
+                <Button
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy("export-csv");
+                    const err = await downloadExport("csv", [documentId]);
+                    if (err) setActionError(err);
+                    setBusy(null);
+                  }}
+                >
+                  CSV 다운로드
+                </Button>
+                <Button
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    setBusy("export-excel");
+                    const err = await downloadExport("excel", [documentId]);
+                    if (err) setActionError(err);
+                    setBusy(null);
+                  }}
+                >
+                  Excel 다운로드
+                </Button>
+              </>
+            )}
           </>
+        }
+      />
+
+      <div className="flex items-center gap-2 -mt-4">
+        <span className="text-xs text-slate-400 font-mono">{doc.ncode}</span>
+        <Badge tone={status.tone}>{status.label}</Badge>
+        {doc.status === "review_required" && unresolvedCount > 0 && (
+          <span className="text-xs text-[var(--color-status-amber-fg)]">확인 필요 {unresolvedCount}건</span>
         )}
-        {busy === "import" && <span className="text-xs text-gray-500">업로드 중…</span>}
       </div>
+
+      {actionError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">{actionError}</p>}
 
       {showReopen && (
-        <div className="border rounded p-4 space-y-2">
-          <input
-            className="border rounded px-2 py-1 w-full"
+        <Card className="p-4 space-y-2">
+          <Input
+            className="w-full"
             placeholder="재검수 사유"
             value={reopenReason}
             onChange={(e) => setReopenReason(e.target.value)}
           />
           <div className="flex gap-2">
-            <button
-              className="text-sm bg-blue-600 text-white rounded px-3 py-1"
+            <Button
+              variant="primary"
               onClick={async () => {
                 if (!reopenReason.trim()) return;
                 await runAction("reopen", { reason: reopenReason });
@@ -176,33 +168,33 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
               }}
             >
               확인
-            </button>
-            <button className="text-sm border rounded px-3 py-1" onClick={() => setShowReopen(false)}>
-              취소
-            </button>
+            </Button>
+            <Button onClick={() => setShowReopen(false)}>취소</Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {doc.fieldValues.length > 0 && (
-        <table className="w-full text-sm border rounded overflow-hidden">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500">
-            <tr>
-              <th className="px-3 py-2">필드</th>
-              <th className="px-3 py-2">원본 인식값</th>
-              <th className="px-3 py-2">정규화값</th>
-              <th className="px-3 py-2">최종값</th>
-              <th className="px-3 py-2">상태 / 사유</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {doc.fieldValues.map((v) => (
-              <FieldValueRow key={v.id} value={v} onSave={saveFinalValue} />
-            ))}
-          </tbody>
-        </table>
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs text-slate-400">
+              <tr>
+                <th className="px-4 py-2.5 font-medium">필드</th>
+                <th className="px-4 py-2.5 font-medium">원본 인식값</th>
+                <th className="px-4 py-2.5 font-medium">정규화값</th>
+                <th className="px-4 py-2.5 font-medium">최종값</th>
+                <th className="px-4 py-2.5 font-medium">상태 / 사유</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border)]">
+              {doc.fieldValues.map((v) => (
+                <FieldValueRow key={v.id} value={v} onSave={saveFinalValue} />
+              ))}
+            </tbody>
+          </table>
+        </Card>
       )}
-    </main>
+    </div>
   );
 }
 
@@ -219,17 +211,17 @@ function FieldValueRow({
   const label = source ? `${source.label}${value.rowIndex !== null ? ` [행 ${value.rowIndex + 1}]` : ""}` : "-";
 
   return (
-    <tr className={value.reviewStatus === "needs_review" ? "bg-amber-50/40" : undefined}>
-      <td className="px-3 py-2">
+    <tr className={value.reviewStatus === "needs_review" ? "bg-[var(--color-status-amber-bg)]/40" : undefined}>
+      <td className="px-4 py-2.5">
         {label}
         {source?.required && <span className="text-red-500"> *</span>}
       </td>
-      <td className="px-3 py-2 text-gray-500">{value.rawOcrValue ?? "—"}</td>
-      <td className="px-3 py-2 text-gray-500">{value.normalizedValue ?? "—"}</td>
-      <td className="px-3 py-2">
+      <td className="px-4 py-2.5 text-slate-400">{value.rawOcrValue ?? "—"}</td>
+      <td className="px-4 py-2.5 text-slate-400">{value.normalizedValue ?? "—"}</td>
+      <td className="px-4 py-2.5">
         {type === "check" ? (
-          <select
-            className="border rounded px-2 py-1 w-full"
+          <Select
+            className="w-full"
             value={local}
             onChange={(e) => {
               setLocal(e.target.value);
@@ -239,27 +231,22 @@ function FieldValueRow({
             <option value="">(미기재)</option>
             <option value="true">true</option>
             <option value="false">false</option>
-          </select>
+          </Select>
         ) : (
-          <input
-            type={type === "number" ? "text" : "text"}
-            className="border rounded px-2 py-1 w-full"
+          <Input
+            className="w-full"
             value={local}
             onChange={(e) => setLocal(e.target.value)}
             onBlur={() => onSave(value.id, local || null)}
           />
         )}
       </td>
-      <td className="px-3 py-2">
-        <span
-          className={`text-xs rounded px-2 py-0.5 ${
-            value.reviewStatus === "needs_review" ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
-          }`}
-        >
+      <td className="px-4 py-2.5">
+        <Badge tone={value.reviewStatus === "needs_review" ? "amber" : "green"}>
           {value.reviewStatus === "needs_review" ? "확인 필요" : "확인됨"}
-        </span>
+        </Badge>
         {value.reviewReasons.length > 0 && (
-          <div className="text-[11px] text-amber-700 mt-1">
+          <div className="text-[11px] text-[var(--color-status-amber-fg)] mt-1">
             {value.reviewReasons.map((r) => REASON_LABEL[r] ?? r).join(", ")}
           </div>
         )}
@@ -270,6 +257,6 @@ function FieldValueRow({
 
 function describeError(json: { error?: string }): string {
   if (json.error === "INVALID_TRANSITION") return "지금 상태에서는 이 동작을 할 수 없습니다.";
-  if (json.error === "VALIDATION_FAILED") return "확인이 필요한 값이 남아 있어 확정할 수 없습니다. 아래 표에서 노란색으로 표시된 항목을 채우세요.";
+  if (json.error === "VALIDATION_FAILED") return "확인이 필요한 값이 남아 있어 확정할 수 없습니다. 아래 표에서 강조된 항목을 채우세요.";
   return "작업을 처리하지 못했습니다.";
 }

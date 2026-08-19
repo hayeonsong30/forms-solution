@@ -4,14 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { DocumentListItemDTO, DocumentStatus } from "@/types";
 import { downloadExport } from "@/lib/downloadExport";
+import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui";
 
-const STATUS_LABEL: Record<DocumentStatus, string> = {
-  printed: "인쇄됨",
-  received: "필기 수신",
-  processing: "처리 중",
-  review_required: "검수 필요",
-  confirmed: "확정",
-  error: "오류",
+const STATUS: Record<DocumentStatus, { label: string; tone: "amber" | "green" | "slate" | "red" | "brand" }> = {
+  printed: { label: "인쇄됨", tone: "slate" },
+  received: { label: "필기 수신", tone: "slate" },
+  processing: { label: "처리 중", tone: "brand" },
+  review_required: { label: "검수 필요", tone: "amber" },
+  confirmed: { label: "확정", tone: "green" },
+  error: { label: "오류", tone: "red" },
 };
 
 export default function DocumentsPage() {
@@ -43,53 +44,62 @@ export default function DocumentsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">문서 조회</h1>
-        <Link href="/templates" className="text-sm text-blue-600 hover:underline">
-          양식 관리 →
-        </Link>
-      </div>
+    <div className="mx-auto max-w-3xl px-8 py-8">
+      <PageHeader
+        title="문서 조회"
+        actions={
+          selected.length > 0 ? (
+            <>
+              <span className="text-sm text-slate-400 mr-1">{selected.length}건 선택됨</span>
+              <Button onClick={() => exportSelected("csv")} disabled={exporting !== null}>
+                {exporting === "csv" ? "생성 중…" : "CSV 다운로드"}
+              </Button>
+              <Button onClick={() => exportSelected("excel")} disabled={exporting !== null}>
+                {exporting === "excel" ? "생성 중…" : "Excel 다운로드"}
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
-      {selected.length > 0 && (
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-sm text-gray-500">{selected.length}건 선택됨</span>
-          <button
-            className="text-sm border rounded px-3 py-1 disabled:opacity-50"
-            onClick={() => exportSelected("csv")}
-            disabled={exporting !== null}
-          >
-            {exporting === "csv" ? "생성 중…" : "CSV 다운로드"}
-          </button>
-          <button
-            className="text-sm border rounded px-3 py-1 disabled:opacity-50"
-            onClick={() => exportSelected("excel")}
-            disabled={exporting !== null}
-          >
-            {exporting === "excel" ? "생성 중…" : "Excel 다운로드"}
-          </button>
-          {exportError && <span className="text-xs text-red-600">{exportError}</span>}
-        </div>
-      )}
+      {exportError && <p className="text-sm text-red-600 mb-4">{exportError}</p>}
 
-      <ul className="divide-y border rounded">
-        {documents.map((d) => (
-          <li key={d.id} className="flex items-center gap-3 px-4 py-3">
-            {d.status === "confirmed" && (
-              <input type="checkbox" checked={selected.includes(d.id)} onChange={() => toggle(d.id)} />
-            )}
-            <div className="flex-1">
-              <Link href={`/documents/${d.id}`} className="font-medium hover:underline">
-                {d.templateVersion.template.name}
-              </Link>
-              <div className="text-xs text-gray-500">
-                {d.ncode} · {STATUS_LABEL[d.status]} · {new Date(d.createdAt).toLocaleString("ko-KR")}
-              </div>
-            </div>
-          </li>
-        ))}
-        {documents.length === 0 && <li className="px-4 py-6 text-sm text-gray-500">아직 문서가 없습니다.</li>}
-      </ul>
-    </main>
+      <Card>
+        <ul className="divide-y divide-[var(--color-border)]">
+          {documents.map((d) => {
+            const status = STATUS[d.status];
+            return (
+              <li key={d.id} className="flex items-center gap-3 px-4 py-3.5">
+                {d.status === "confirmed" ? (
+                  <input
+                    type="checkbox"
+                    className="accent-[var(--color-brand-600)]"
+                    checked={selected.includes(d.id)}
+                    onChange={() => toggle(d.id)}
+                  />
+                ) : (
+                  <span className="w-4" />
+                )}
+                <div className="flex-1">
+                  <Link href={`/documents/${d.id}`} className="font-medium text-sm hover:text-[var(--color-brand-600)]">
+                    {d.templateVersion.template.name}
+                  </Link>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-slate-400 font-mono">{d.ncode}</span>
+                    <Badge tone={status.tone}>{status.label}</Badge>
+                    <span className="text-xs text-slate-400">{new Date(d.createdAt).toLocaleString("ko-KR")}</span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+          {documents.length === 0 && (
+            <li>
+              <EmptyState>아직 문서가 없습니다.</EmptyState>
+            </li>
+          )}
+        </ul>
+      </Card>
+    </div>
   );
 }
