@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentVersion, NotFoundError } from "@/lib/template";
+import { getCurrentVersion, loadValidationInput, NotFoundError } from "@/lib/template";
 import { validateFields } from "@/lib/validateFields";
 
 // PRD_폼솔루션 §7.1.1: 편집 중 → 인쇄 가능 (1차 데모 단순화된 상태 전이)
@@ -7,9 +7,9 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/templates/[tem
   const { templateId } = await ctx.params;
   try {
     const { version } = await getCurrentVersion(templateId);
-    const fields = await prisma.field.findMany({ where: { templateVersionId: version.id } });
+    const { fields, repeatGroups } = await loadValidationInput(version.id);
 
-    if (fields.length === 0) {
+    if (fields.length === 0 && repeatGroups.length === 0) {
       const template = await prisma.template.update({
         where: { id: templateId },
         data: { printable: false, printableReason: "편집 미완료" },
@@ -17,17 +17,7 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/templates/[tem
       return Response.json({ error: "VALIDATION_FAILED", template }, { status: 409 });
     }
 
-    const issues = validateFields(
-      fields.map((f) => ({
-        id: f.id,
-        pageNo: f.pageNo,
-        dataKey: f.dataKey,
-        boxX: f.boxX,
-        boxY: f.boxY,
-        boxW: f.boxW,
-        boxH: f.boxH,
-      }))
-    );
+    const issues = validateFields(fields, repeatGroups);
 
     if (issues.length > 0) {
       const template = await prisma.template.update({

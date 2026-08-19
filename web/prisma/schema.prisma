@@ -221,8 +221,15 @@ model RepeatColumn {
   repeatGroupId String      @map("repeat_group_id")
   repeatGroup   RepeatGroup @relation(fields: [repeatGroupId], references: [id])
   orderNo       Int         @map("order_no")
+  label         String
   dataKey       String      @map("data_key")
   type          FieldType
+  // 첫 데이터 행에서의 열 위치 (정규화 0~1, 페이지 기준) — 반복행 해제 시 복원용
+  boxX          Float       @map("box_x")
+  boxY          Float       @map("box_y")
+  boxW          Float       @map("box_w")
+  boxH          Float       @map("box_h")
+  required      Boolean     @default(false)
   config        Json        @default("{}")
 
   fieldValues FieldValue[]

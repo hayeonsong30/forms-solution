@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { updateFieldSchema, defaultConfigForType, type FieldConfig } from "@/lib/schemas";
 import { slugifyDataKey, withUniqueSuffix } from "@/lib/dataKey";
+import { existingDataKeys } from "@/lib/template";
 
 export async function PATCH(
   req: Request,
@@ -26,11 +27,9 @@ export async function PATCH(
   if (dataKey) {
     const base = slugifyDataKey(dataKey);
     if (base !== current.dataKey) {
-      const siblings = await prisma.field.findMany({
-        where: { templateVersionId: current.templateVersionId, id: { not: fieldId } },
-        select: { dataKey: true },
-      });
-      nextDataKey = withUniqueSuffix(base, new Set(siblings.map((f) => f.dataKey)));
+      const keys = await existingDataKeys(current.templateVersionId);
+      keys.delete(current.dataKey);
+      nextDataKey = withUniqueSuffix(base, keys);
     }
   }
 

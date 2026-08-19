@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { getCurrentVersion, NotFoundError } from "@/lib/template";
+import { existingDataKeys, getCurrentVersion, NotFoundError } from "@/lib/template";
 import { createFieldSchema, defaultConfigForType } from "@/lib/schemas";
 import { slugifyDataKey, withUniqueSuffix } from "@/lib/dataKey";
 
@@ -15,11 +15,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
   try {
     const { version } = await getCurrentVersion(templateId);
 
-    const existing = await prisma.field.findMany({
-      where: { templateVersionId: version.id },
-      select: { dataKey: true },
-    });
-    const existingKeys = new Set(existing.map((f) => f.dataKey));
+    const existingKeys = await existingDataKeys(version.id);
     const base = parsed.data.dataKey ? slugifyDataKey(parsed.data.dataKey) : slugifyDataKey(parsed.data.label);
     const dataKey = withUniqueSuffix(base, existingKeys);
 

@@ -74,11 +74,44 @@ export type TemplateVersionDTO = {
   pageCount: number;
 };
 
+export type RepeatColumnDTO = {
+  id: string;
+  repeatGroupId: string;
+  orderNo: number;
+  label: string;
+  dataKey: string;
+  type: FieldType;
+  boxX: number;
+  boxY: number;
+  boxW: number;
+  boxH: number;
+  required: boolean;
+  config: FieldConfig;
+};
+
+export type RepeatGroupDTO = {
+  id: string;
+  templateVersionId: string;
+  label: string;
+  dataKey: string;
+  pageNo: number;
+  areaX: number;
+  areaY: number;
+  areaW: number;
+  areaH: number;
+  rowHeight: number;
+  maxRows: number;
+  blankRowPolicy: "exclude" | "include";
+  useRowNumber: boolean;
+  allowDuplicate: boolean;
+  columns: RepeatColumnDTO[];
+};
+
 export type TemplateDetailResponse = {
   template: TemplateDTO;
   version: TemplateVersionDTO;
   fields: FieldDTO[];
-  repeatGroups: unknown[];
+  repeatGroups: RepeatGroupDTO[];
 };
 
 export type FieldIssue = {

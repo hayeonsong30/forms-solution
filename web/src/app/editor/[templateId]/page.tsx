@@ -7,6 +7,7 @@ import type {
   FieldIssue,
   FieldType,
   NumberConfig,
+  RepeatGroupDTO,
   TemplateDetailResponse,
   TextConfig,
 } from "@/types";
@@ -25,6 +26,9 @@ export default function EditorPage({
 
   const [data, setData] = useState<TemplateDetailResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [multiSelectIds, setMultiSelectIds] = useState<string[]>([]);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [tool, setTool] = useState<Tool>({ mode: "select" });
   const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -42,7 +46,9 @@ export default function EditorPage({
   }, [load]);
 
   const fields = data?.fields ?? [];
+  const repeatGroups = data?.repeatGroups ?? [];
   const selected = fields.find((f) => f.id === selectedId) ?? null;
+  const selectedGroup = repeatGroups.find((g) => g.id === selectedGroupId) ?? null;
   const otherCheckFields = fields.filter((f) => f.type === "check" && f.id !== selectedId);
 
   function patchLocalField(id: string, patch: Partial<FieldDTO>) {
@@ -97,6 +103,95 @@ export default function EditorPage({
     }
   }
 
+  function patchLocalGroup(id: string, patch: Partial<RepeatGroupDTO>) {
+    setData((d) => (d ? { ...d, repeatGroups: d.repeatGroups.map((g) => (g.id === id ? { ...g, ...patch } : g)) } : d));
+  }
+
+  async function saveGroup(id: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/templates/${templateId}/repeat-groups/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) patchLocalGroup(id, await res.json());
+  }
+
+  function selectField(id: string, shiftKey: boolean) {
+    setSelectedGroupId(null);
+    if (shiftKey) {
+      setSelectedId(null);
+      setMultiSelectIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+      return;
+    }
+    setMultiSelectIds([]);
+    setSelectedId(id);
+  }
+
+  function selectGroup(id: string) {
+    setSelectedId(null);
+    setMultiSelectIds([]);
+    setSelectedGroupId(id);
+  }
+
+  async function createRepeatGroup(opts: {
+    label: string;
+    maxRows: number;
+    blankRowPolicy: "exclude" | "include";
+    useRowNumber: boolean;
+  }) {
+    const res = await fetch(`/api/templates/${templateId}/repeat-groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...opts, fieldIds: multiSelectIds }),
+    });
+    if (res.ok) {
+      const group = await res.json();
+      setMultiSelectIds([]);
+      setGroupModalOpen(false);
+      await load();
+      setSelectedGroupId(group.id);
+    } else {
+      const json = await res.json();
+      setActionError(json.error === "FIELDS_MUST_SHARE_PAGE" ? "같은 페이지의 필드만 묶을 수 있습니다." : "반복행 생성 실패");
+    }
+  }
+
+  async function ungroupSelected() {
+    if (!selectedGroup) return;
+    const res = await fetch(`/api/templates/${templateId}/repeat-groups/${selectedGroup.id}`, { method: "DELETE" });
+    if (res.ok) {
+      setSelectedGroupId(null);
+      await load();
+    }
+  }
+
+  function startGroupDrag(group: RepeatGroupDTO, e: React.PointerEvent) {
+    e.stopPropagation();
+    if (!canvasRef.current) return;
+    selectGroup(group.id);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const start = { x: group.areaX, y: group.areaY };
+
+    function onMove(ev: PointerEvent) {
+      const dx = (ev.clientX - startX) / rect.width;
+      const dy = (ev.clientY - startY) / rect.height;
+      patchLocalGroup(group.id, {
+        areaX: clamp(start.x + dx, 0, 1 - group.areaW),
+        areaY: clamp(start.y + dy, 0, 1 - group.areaH),
+      });
+    }
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const g = data?.repeatGroups.find((x) => x.id === group.id);
+      if (g) saveGroup(group.id, { area: { x: g.areaX, y: g.areaY, w: g.areaW } });
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   async function deleteSelected() {
     if (!selected) return;
     const res = await fetch(`/api/templates/${templateId}/fields/${selected.id}`, { method: "DELETE" });
@@ -128,7 +223,14 @@ export default function EditorPage({
   }
 
   function handleCanvasClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (tool.mode !== "add" || !canvasRef.current) return;
+    if (tool.mode !== "add") {
+      if (!canvasRef.current) return;
+      setSelectedId(null);
+      setSelectedGroupId(null);
+      if (!e.shiftKey) setMultiSelectIds([]);
+      return;
+    }
+    if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -197,6 +299,14 @@ export default function EditorPage({
           >
             + 체크
           </ToolButton>
+          {multiSelectIds.length > 0 && (
+            <button
+              className="text-sm bg-teal-600 text-white rounded px-3 py-1"
+              onClick={() => setGroupModalOpen(true)}
+            >
+              반복행으로 묶기 ({multiSelectIds.length})
+            </button>
+          )}
           <div className="flex-1" />
           <button className="text-sm border rounded px-3 py-1" onClick={runValidate}>
             검사
@@ -225,20 +335,47 @@ export default function EditorPage({
             className="relative bg-white shadow mx-auto"
             style={{ width: 640, height: 640 * PAGE_RATIO, cursor: tool.mode === "add" ? "crosshair" : "default" }}
           >
+            {repeatGroups.map((g) => (
+              <div
+                key={g.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectGroup(g.id);
+                }}
+                onPointerDown={(e) => startGroupDrag(g, e)}
+                className={`absolute border-2 overflow-hidden select-none ${
+                  g.id === selectedGroupId ? "border-teal-600 bg-teal-50/40" : "border-teal-400 bg-teal-50/20"
+                }`}
+                style={{
+                  left: `${g.areaX * 100}%`,
+                  top: `${g.areaY * 100}%`,
+                  width: `${g.areaW * 100}%`,
+                  height: `${g.areaH * 100}%`,
+                  backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent ${
+                    (g.rowHeight / g.areaH) * 100 - 0.3
+                  }%, rgba(13,148,136,0.4) ${(g.rowHeight / g.areaH) * 100 - 0.3}%, rgba(13,148,136,0.4) ${
+                    (g.rowHeight / g.areaH) * 100
+                  }%)`,
+                }}
+              >
+                <span className="absolute -top-5 left-0 text-[10px] text-teal-700 bg-white/80 px-1">
+                  {g.label} × {g.maxRows}
+                </span>
+              </div>
+            ))}
             {fields.map((f) => (
               <div
                 key={f.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedId(f.id);
-                }}
+                onClick={(e) => selectField(f.id, e.shiftKey)}
                 onPointerDown={(e) => startDrag(f, e, "move")}
                 className={`absolute border-2 text-[10px] px-1 overflow-hidden select-none ${
-                  f.id === selectedId
-                    ? "border-blue-600 bg-blue-50/70"
-                    : f.status === "suggested"
-                      ? "border-dashed border-violet-500 bg-violet-50/50"
-                      : "border-slate-400 bg-white/60"
+                  multiSelectIds.includes(f.id)
+                    ? "border-amber-500 bg-amber-50/70"
+                    : f.id === selectedId
+                      ? "border-blue-600 bg-blue-50/70"
+                      : f.status === "suggested"
+                        ? "border-dashed border-violet-500 bg-violet-50/50"
+                        : "border-slate-400 bg-white/60"
                 }`}
                 style={{
                   left: `${f.boxX * 100}%`,
@@ -261,7 +398,92 @@ export default function EditorPage({
       </div>
 
       <aside className="w-80 border-l overflow-y-auto">
-        {!selected && <p className="p-4 text-sm text-gray-500">필드를 선택하세요.</p>}
+        {!selected && !selectedGroup && <p className="p-4 text-sm text-gray-500">필드를 선택하세요.</p>}
+        {selectedGroup && (
+          <div className="divide-y">
+            <Section title="반복행 속성">
+              <Field label="그룹명">
+                <input
+                  className="border rounded px-2 py-1 w-full"
+                  value={selectedGroup.label}
+                  onChange={(e) => patchLocalGroup(selectedGroup.id, { label: e.target.value })}
+                  onBlur={() => saveGroup(selectedGroup.id, { label: selectedGroup.label })}
+                />
+              </Field>
+              <Field label="그룹 데이터 키">
+                <input
+                  className="border rounded px-2 py-1 w-full"
+                  value={selectedGroup.dataKey}
+                  onChange={(e) => patchLocalGroup(selectedGroup.id, { dataKey: e.target.value })}
+                  onBlur={() => saveGroup(selectedGroup.id, { dataKey: selectedGroup.dataKey })}
+                />
+              </Field>
+              <Field label="최대 행 수">
+                <input
+                  type="number"
+                  min={1}
+                  className="border rounded px-2 py-1 w-full"
+                  value={selectedGroup.maxRows}
+                  onChange={(e) => patchLocalGroup(selectedGroup.id, { maxRows: Number(e.target.value) })}
+                  onBlur={() => saveGroup(selectedGroup.id, { maxRows: selectedGroup.maxRows })}
+                />
+              </Field>
+              <Field label="빈 행 처리">
+                <select
+                  className="border rounded px-2 py-1 w-full"
+                  value={selectedGroup.blankRowPolicy}
+                  onChange={(e) => {
+                    const blankRowPolicy = e.target.value as "exclude" | "include";
+                    patchLocalGroup(selectedGroup.id, { blankRowPolicy });
+                    saveGroup(selectedGroup.id, { blankRowPolicy });
+                  }}
+                >
+                  <option value="exclude">빈 행 제외</option>
+                  <option value="include">빈 행 포함</option>
+                </select>
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedGroup.useRowNumber}
+                  onChange={(e) => {
+                    patchLocalGroup(selectedGroup.id, { useRowNumber: e.target.checked });
+                    saveGroup(selectedGroup.id, { useRowNumber: e.target.checked });
+                  }}
+                />
+                행 번호 사용
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selectedGroup.allowDuplicate}
+                  onChange={(e) => {
+                    patchLocalGroup(selectedGroup.id, { allowDuplicate: e.target.checked });
+                    saveGroup(selectedGroup.id, { allowDuplicate: e.target.checked });
+                  }}
+                />
+                중복 허용
+              </label>
+            </Section>
+            <Section title="열 구성 (첫 행 기준, 좌→우)">
+              <ul className="space-y-1">
+                {selectedGroup.columns.map((c) => (
+                  <li key={c.id} className="text-xs border rounded px-2 py-1 flex justify-between">
+                    <span>{c.label}</span>
+                    <span className="text-gray-400">
+                      {c.dataKey} · {c.type}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+            <div className="p-4">
+              <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={ungroupSelected}>
+                반복행 해제 (첫 행 필드로 되돌리기)
+              </button>
+            </div>
+          </div>
+        )}
         {selected && (
           <div className="divide-y">
             <Section title="기본 정보">
@@ -419,6 +641,14 @@ export default function EditorPage({
           </div>
         )}
       </aside>
+
+      {groupModalOpen && (
+        <CreateRepeatGroupModal
+          fieldCount={multiSelectIds.length}
+          onCancel={() => setGroupModalOpen(false)}
+          onCreate={createRepeatGroup}
+        />
+      )}
     </main>
   );
 }
@@ -712,6 +942,67 @@ function CheckConfigPanel({
         <p className="text-[11px] text-gray-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
       )}
     </>
+  );
+}
+
+function CreateRepeatGroupModal({
+  fieldCount,
+  onCancel,
+  onCreate,
+}: {
+  fieldCount: number;
+  onCancel: () => void;
+  onCreate: (opts: { label: string; maxRows: number; blankRowPolicy: "exclude" | "include"; useRowNumber: boolean }) => void;
+}) {
+  const [label, setLabel] = useState("반복행");
+  const [maxRows, setMaxRows] = useState(25);
+  const [blankRowPolicy, setBlankRowPolicy] = useState<"exclude" | "include">("exclude");
+  const [useRowNumber, setUseRowNumber] = useState(false);
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white rounded shadow-lg w-96 p-5 space-y-3">
+        <h2 className="font-medium">반복행으로 묶기</h2>
+        <p className="text-xs text-gray-500">선택한 필드 {fieldCount}개를 첫 행으로 하는 반복행 그룹을 만듭니다.</p>
+        <Field label="그룹명">
+          <input className="border rounded px-2 py-1 w-full" value={label} onChange={(e) => setLabel(e.target.value)} />
+        </Field>
+        <Field label="최대 행 수">
+          <input
+            type="number"
+            min={1}
+            className="border rounded px-2 py-1 w-full"
+            value={maxRows}
+            onChange={(e) => setMaxRows(Number(e.target.value))}
+          />
+        </Field>
+        <Field label="빈 행 처리">
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={blankRowPolicy}
+            onChange={(e) => setBlankRowPolicy(e.target.value as "exclude" | "include")}
+          >
+            <option value="exclude">빈 행 제외</option>
+            <option value="include">빈 행 포함</option>
+          </select>
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={useRowNumber} onChange={(e) => setUseRowNumber(e.target.checked)} />
+          행 번호 사용
+        </label>
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="text-sm border rounded px-3 py-1" onClick={onCancel}>
+            취소
+          </button>
+          <button
+            className="text-sm bg-teal-600 text-white rounded px-3 py-1"
+            onClick={() => onCreate({ label, maxRows, blankRowPolicy, useRowNumber })}
+          >
+            만들기
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

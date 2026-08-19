@@ -84,6 +84,34 @@ export function defaultConfigForType(type: FieldType, overrides: FieldConfig = {
   return { check: checkConfigSchema.parse(overrides.check ?? {}) };
 }
 
+// PRD_양식편집기_상세 §11.1: 첫 행 필드 다중선택 후 "반복행으로 묶기"
+export const createRepeatGroupSchema = z.object({
+  label: z.string().min(1),
+  dataKey: z.string().min(1).optional(),
+  fieldIds: z.array(z.string()).min(1),
+  maxRows: z.number().int().min(1).default(25),
+  blankRowPolicy: z.enum(["exclude", "include"]).default("exclude"),
+  useRowNumber: z.boolean().default(false),
+  allowDuplicate: z.boolean().default(false),
+});
+
+export const updateRepeatGroupSchema = z.object({
+  label: z.string().min(1).optional(),
+  dataKey: z.string().min(1).optional(),
+  maxRows: z.number().int().min(1).optional(),
+  blankRowPolicy: z.enum(["exclude", "include"]).optional(),
+  useRowNumber: z.boolean().optional(),
+  allowDuplicate: z.boolean().optional(),
+  area: z
+    .object({
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      w: z.number().gt(0).max(1),
+    })
+    .optional(),
+  rowHeight: z.number().gt(0).max(1).optional(),
+});
+
 export const createTemplateSchema = z.object({
   orgId: z.string().uuid(),
   name: z.string().min(1),
