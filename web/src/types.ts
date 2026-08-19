@@ -1,10 +1,57 @@
 export type FieldType = "text" | "number" | "check";
 
+export type TextConfig = {
+  writingMode: "single" | "multiline";
+  language: "ja" | "ko" | "en" | "auto";
+  charPolicy: "all" | "numeric_included" | "alnum" | "custom_pattern";
+  customPattern?: string;
+  maxLength?: number;
+  preserveWhitespace: boolean;
+  preserveNewline: boolean;
+};
+
+export type NumberConfig = {
+  numberFormat: "integer" | "decimal";
+  allowNegative: boolean;
+  decimalPlaces: number;
+  min?: number;
+  max?: number;
+  unit?: string;
+  thousandsSeparator: boolean;
+  allowBlank: boolean;
+};
+
+export type CheckConfig = {
+  mode: "presence" | "symbol_classification";
+  trueMarks: string[];
+  falseMarks: string[];
+  blankValue: "false" | "null" | "required_error";
+  ambiguousPolicy: "always_review" | "nearest_guess";
+  regionMode: "box" | "full_area";
+  exclusiveWithFieldId?: string;
+};
+
+export type OcrConfig = {
+  enabled: boolean;
+  formatHint?: string;
+  lowConfidencePolicy: "auto_flag" | "block_confirm";
+  autoRotate: boolean;
+  contrastEnhance: boolean;
+};
+
+export type FieldConfig = {
+  text?: TextConfig;
+  number?: NumberConfig;
+  check?: CheckConfig;
+  ocr?: OcrConfig;
+};
+
 export type FieldDTO = {
   id: string;
   templateVersionId: string;
   pageNo: number;
   label: string;
+  description: string | null;
   dataKey: string;
   type: FieldType;
   boxX: number;
@@ -16,7 +63,7 @@ export type FieldDTO = {
   hidden: boolean;
   source: "manual" | "ai" | "copied";
   status: "suggested" | "confirmed";
-  config: Record<string, unknown>;
+  config: FieldConfig;
 };
 
 export type TemplateDTO = {

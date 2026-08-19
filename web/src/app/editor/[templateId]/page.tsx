@@ -1,7 +1,16 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import type { FieldDTO, FieldIssue, FieldType, TemplateDetailResponse } from "@/types";
+import type {
+  CheckConfig,
+  FieldDTO,
+  FieldIssue,
+  FieldType,
+  NumberConfig,
+  OcrConfig,
+  TemplateDetailResponse,
+  TextConfig,
+} from "@/types";
 
 const PAGE_RATIO = 297 / 210; // A4 세로 비율 (h/w)
 const DEFAULT_BOX = { w: 0.16, h: 0.04 };
@@ -20,6 +29,7 @@ export default function EditorPage({
   const [tool, setTool] = useState<Tool>({ mode: "select" });
   const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showPosition, setShowPosition] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -34,37 +44,32 @@ export default function EditorPage({
 
   const fields = data?.fields ?? [];
   const selected = fields.find((f) => f.id === selectedId) ?? null;
+  const otherCheckFields = fields.filter((f) => f.type === "check" && f.id !== selectedId);
 
   function patchLocalField(id: string, patch: Partial<FieldDTO>) {
     setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) } : d));
   }
 
-  async function saveField(id: string, patch: Partial<FieldDTO>) {
-    const body: Record<string, unknown> = {};
-    if (patch.label !== undefined) body.label = patch.label;
-    if (patch.required !== undefined) body.required = patch.required;
-    if (patch.type !== undefined) body.type = patch.type;
-    if (
-      patch.boxX !== undefined ||
-      patch.boxY !== undefined ||
-      patch.boxW !== undefined ||
-      patch.boxH !== undefined
-    ) {
-      const f = fields.find((x) => x.id === id);
-      if (f) {
-        body.box = {
-          x: patch.boxX ?? f.boxX,
-          y: patch.boxY ?? f.boxY,
-          w: patch.boxW ?? f.boxW,
-          h: patch.boxH ?? f.boxH,
-        };
-      }
-    }
+  async function saveField(id: string, body: Record<string, unknown>) {
     await fetch(`/api/templates/${templateId}/fields/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+  }
+
+  async function saveBox(id: string, box: { x: number; y: number; w: number; h: number }) {
+    await saveField(id, { box });
+  }
+
+  function patchConfig<K extends "text" | "number" | "check" | "ocr">(
+    field: FieldDTO,
+    key: K,
+    patch: Partial<NonNullable<FieldDTO["config"][K]>>
+  ) {
+    const nextSection = { ...(field.config[key] ?? {}), ...patch };
+    patchLocalField(field.id, { config: { ...field.config, [key]: nextSection } });
+    saveField(field.id, { config: { [key]: patch } });
   }
 
   async function createField(x: number, y: number, type: FieldType) {
@@ -159,7 +164,7 @@ export default function EditorPage({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       const f = data?.fields.find((x) => x.id === field.id);
-      if (f) saveField(field.id, f);
+      if (f) saveBox(field.id, { x: f.boxX, y: f.boxY, w: f.boxW, h: f.boxH });
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -197,10 +202,7 @@ export default function EditorPage({
           <button className="text-sm border rounded px-3 py-1" onClick={runValidate}>
             검사
           </button>
-          <button
-            className="text-sm bg-blue-600 text-white rounded px-3 py-1"
-            onClick={activate}
-          >
+          <button className="text-sm bg-blue-600 text-white rounded px-3 py-1" onClick={activate}>
             인쇄 가능으로 전환
           </button>
           <span className="text-xs text-gray-500 ml-2">
@@ -259,55 +261,169 @@ export default function EditorPage({
         </div>
       </div>
 
-      <aside className="w-72 border-l p-4 overflow-y-auto">
-        <h2 className="font-medium mb-3">필드 속성</h2>
-        {!selected && <p className="text-sm text-gray-500">필드를 선택하세요.</p>}
+      <aside className="w-80 border-l overflow-y-auto">
+        {!selected && <p className="p-4 text-sm text-gray-500">필드를 선택하세요.</p>}
         {selected && (
-          <div className="space-y-3 text-sm">
-            <Field label="라벨">
-              <input
-                className="border rounded px-2 py-1 w-full"
-                value={selected.label}
-                onChange={(e) => patchLocalField(selected.id, { label: e.target.value })}
-                onBlur={() => saveField(selected.id, { label: selected.label })}
-              />
-            </Field>
-            <Field label="데이터 키">
-              <input className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-500" value={selected.dataKey} readOnly />
-            </Field>
-            <Field label="유형">
-              <select
-                className="border rounded px-2 py-1 w-full"
-                value={selected.type}
-                onChange={(e) => {
-                  const type = e.target.value as FieldType;
-                  patchLocalField(selected.id, { type });
-                  saveField(selected.id, { type });
-                }}
-              >
-                <option value="text">텍스트</option>
-                <option value="number">숫자</option>
-                <option value="check">체크</option>
-              </select>
-            </Field>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={selected.required}
-                onChange={(e) => {
-                  patchLocalField(selected.id, { required: e.target.checked });
-                  saveField(selected.id, { required: e.target.checked });
-                }}
-              />
-              필수 필드
-            </label>
-            <div className="text-xs text-gray-400">
-              {(selected.boxX * 100).toFixed(1)}%, {(selected.boxY * 100).toFixed(1)}% ·{" "}
-              {(selected.boxW * 100).toFixed(1)}% × {(selected.boxH * 100).toFixed(1)}%
+          <div className="divide-y">
+            <Section title="기본 정보">
+              <Field label="필드명">
+                <input
+                  className="border rounded px-2 py-1 w-full"
+                  value={selected.label}
+                  disabled={selected.locked}
+                  onChange={(e) => patchLocalField(selected.id, { label: e.target.value })}
+                  onBlur={() => saveField(selected.id, { label: selected.label })}
+                />
+              </Field>
+              <Field label="데이터 키">
+                <input
+                  className="border rounded px-2 py-1 w-full disabled:bg-gray-50 disabled:text-gray-400"
+                  value={selected.dataKey}
+                  disabled={selected.locked}
+                  onChange={(e) => patchLocalField(selected.id, { dataKey: e.target.value })}
+                  onBlur={() => saveField(selected.id, { dataKey: selected.dataKey })}
+                />
+                <p className="text-[11px] text-gray-400 mt-1">편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.</p>
+              </Field>
+              <Field label="데이터 유형">
+                <select
+                  className="border rounded px-2 py-1 w-full"
+                  value={selected.type}
+                  disabled={selected.locked}
+                  onChange={(e) => {
+                    const type = e.target.value as FieldType;
+                    saveField(selected.id, { type }).then(load);
+                  }}
+                >
+                  <option value="text">텍스트</option>
+                  <option value="number">숫자</option>
+                  <option value="check">체크 판정</option>
+                </select>
+              </Field>
+              <Field label="설명">
+                <textarea
+                  className="border rounded px-2 py-1 w-full"
+                  rows={2}
+                  value={selected.description ?? ""}
+                  onChange={(e) => patchLocalField(selected.id, { description: e.target.value })}
+                  onBlur={() => saveField(selected.id, { description: selected.description ?? "" })}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.required}
+                  onChange={(e) => {
+                    patchLocalField(selected.id, { required: e.target.checked });
+                    saveField(selected.id, { required: e.target.checked });
+                  }}
+                />
+                필수 필드
+              </label>
+            </Section>
+
+            <Section title="유형별 설정">
+              {selected.type === "text" && (
+                <TextConfigPanel value={selected.config.text} onChange={(patch) => patchConfig(selected, "text", patch)} />
+              )}
+              {selected.type === "number" && (
+                <NumberConfigPanel
+                  value={selected.config.number}
+                  onChange={(patch) => patchConfig(selected, "number", patch)}
+                />
+              )}
+              {selected.type === "check" && (
+                <CheckConfigPanel
+                  value={selected.config.check}
+                  otherCheckFields={otherCheckFields}
+                  onChange={(patch) => patchConfig(selected, "check", patch)}
+                />
+              )}
+            </Section>
+
+            <Section title="OCR 설정">
+              <OcrConfigPanel value={selected.config.ocr} onChange={(patch) => patchConfig(selected, "ocr", patch)} />
+            </Section>
+
+            <Section
+              title="위치·크기"
+              collapsible
+              collapsed={!showPosition}
+              onToggle={() => setShowPosition((v) => !v)}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <PercentField
+                  label="X"
+                  value={selected.boxX}
+                  onCommit={(v) => saveBox(selected.id, { x: v, y: selected.boxY, w: selected.boxW, h: selected.boxH })}
+                />
+                <PercentField
+                  label="Y"
+                  value={selected.boxY}
+                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: v, w: selected.boxW, h: selected.boxH })}
+                />
+                <PercentField
+                  label="Width"
+                  value={selected.boxW}
+                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: selected.boxY, w: v, h: selected.boxH })}
+                />
+                <PercentField
+                  label="Height"
+                  value={selected.boxH}
+                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: selected.boxY, w: selected.boxW, h: v })}
+                />
+              </div>
+              <Field label="페이지">
+                <input
+                  type="number"
+                  min={1}
+                  className="border rounded px-2 py-1 w-full"
+                  value={selected.pageNo}
+                  onChange={(e) => patchLocalField(selected.id, { pageNo: Number(e.target.value) })}
+                  onBlur={() => saveField(selected.id, { pageNo: selected.pageNo })}
+                />
+              </Field>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={selected.locked}
+                  onChange={(e) => {
+                    patchLocalField(selected.id, { locked: e.target.checked });
+                    saveField(selected.id, { locked: e.target.checked });
+                  }}
+                />
+                잠금 (위치·유형·데이터 키 변경 방지)
+              </label>
+            </Section>
+
+            <Section title="검증">
+              <p className="text-xs text-gray-500">
+                필수 여부는 기본 정보 섹션에서, 최대 길이/숫자 범위/사용자 패턴은 유형별 설정 섹션에서 설정합니다.
+              </p>
+              {selected.type === "check" && (
+                <Field label="교차 검증 (동시 true 불가 대상)">
+                  <select
+                    className="border rounded px-2 py-1 w-full"
+                    value={selected.config.check?.exclusiveWithFieldId ?? ""}
+                    onChange={(e) => patchConfig(selected, "check", { exclusiveWithFieldId: e.target.value || undefined })}
+                  >
+                    <option value="">없음</option>
+                    {otherCheckFields.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.label} ({f.dataKey})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
+                </Field>
+              )}
+            </Section>
+
+            <div className="p-4">
+              <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={deleteSelected}>
+                필드 삭제
+              </button>
             </div>
-            <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={deleteSelected}>
-              필드 삭제
-            </button>
           </div>
         )}
       </aside>
@@ -319,15 +435,7 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(Math.max(v, min), Math.max(min, max));
 }
 
-function ToolButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function ToolButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -338,11 +446,321 @@ function ToolButton({
   );
 }
 
+function Section({
+  title,
+  children,
+  collapsible,
+  collapsed,
+  onToggle,
+}: {
+  title: string;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  return (
+    <div className="p-4">
+      <button
+        className="flex items-center justify-between w-full text-left font-medium text-sm mb-3"
+        onClick={collapsible ? onToggle : undefined}
+      >
+        {title}
+        {collapsible && <span className="text-gray-400">{collapsed ? "▸" : "▾"}</span>}
+      </button>
+      {(!collapsible || !collapsed) && <div className="space-y-3 text-sm">{children}</div>}
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       {children}
     </div>
+  );
+}
+
+function PercentField({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
+  const [local, setLocal] = useState((value * 100).toFixed(1));
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync local edit buffer when box changes externally (drag)
+    setLocal((value * 100).toFixed(1));
+  }, [value]);
+  return (
+    <Field label={`${label} (%)`}>
+      <input
+        type="number"
+        step={0.1}
+        className="border rounded px-2 py-1 w-full"
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={() => {
+          const n = Number(local);
+          if (!Number.isNaN(n)) onCommit(clamp(n / 100, 0, 1));
+        }}
+      />
+    </Field>
+  );
+}
+
+function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p: Partial<TextConfig>) => void }) {
+  const v = value ?? ({} as TextConfig);
+  return (
+    <>
+      <Field label="작성 형태">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.writingMode ?? "single"}
+          onChange={(e) => onChange({ writingMode: e.target.value as TextConfig["writingMode"] })}
+        >
+          <option value="single">한 줄</option>
+          <option value="multiline">여러 줄</option>
+        </select>
+      </Field>
+      <Field label="인식 언어">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.language ?? "ja"}
+          onChange={(e) => onChange({ language: e.target.value as TextConfig["language"] })}
+        >
+          <option value="ja">일본어</option>
+          <option value="ko">한국어</option>
+          <option value="en">영어</option>
+          <option value="auto">자동</option>
+        </select>
+      </Field>
+      <Field label="문자 정책">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.charPolicy ?? "all"}
+          onChange={(e) => onChange({ charPolicy: e.target.value as TextConfig["charPolicy"] })}
+        >
+          <option value="all">모든 문자</option>
+          <option value="numeric_included">숫자 포함 문자</option>
+          <option value="alnum">영숫자</option>
+          <option value="custom_pattern">사용자 패턴</option>
+        </select>
+      </Field>
+      {v.charPolicy === "custom_pattern" && (
+        <Field label="사용자 패턴 (정규식)">
+          <input
+            className="border rounded px-2 py-1 w-full"
+            defaultValue={v.customPattern ?? ""}
+            onBlur={(e) => onChange({ customPattern: e.target.value })}
+          />
+        </Field>
+      )}
+      <Field label="최대 길이">
+        <input
+          type="number"
+          min={1}
+          className="border rounded px-2 py-1 w-full"
+          defaultValue={v.maxLength ?? ""}
+          onBlur={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : undefined })}
+        />
+      </Field>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.preserveWhitespace ?? false} onChange={(e) => onChange({ preserveWhitespace: e.target.checked })} />
+        공백 보존
+      </label>
+      {v.writingMode === "multiline" && (
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={v.preserveNewline ?? false} onChange={(e) => onChange({ preserveNewline: e.target.checked })} />
+          줄바꿈 보존
+        </label>
+      )}
+    </>
+  );
+}
+
+function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange: (p: Partial<NumberConfig>) => void }) {
+  const v = value ?? ({} as NumberConfig);
+  return (
+    <>
+      <Field label="숫자 형식">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.numberFormat ?? "integer"}
+          onChange={(e) => onChange({ numberFormat: e.target.value as NumberConfig["numberFormat"] })}
+        >
+          <option value="integer">정수</option>
+          <option value="decimal">소수</option>
+        </select>
+      </Field>
+      {v.numberFormat === "decimal" && (
+        <Field label="소수 자릿수 (0~6)">
+          <input
+            type="number"
+            min={0}
+            max={6}
+            className="border rounded px-2 py-1 w-full"
+            defaultValue={v.decimalPlaces ?? 0}
+            onBlur={(e) => onChange({ decimalPlaces: Number(e.target.value) })}
+          />
+        </Field>
+      )}
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.allowNegative ?? false} onChange={(e) => onChange({ allowNegative: e.target.checked })} />
+        음수 허용
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="최소">
+          <input
+            type="number"
+            className="border rounded px-2 py-1 w-full"
+            defaultValue={v.min ?? ""}
+            onBlur={(e) => onChange({ min: e.target.value ? Number(e.target.value) : undefined })}
+          />
+        </Field>
+        <Field label="최대">
+          <input
+            type="number"
+            className="border rounded px-2 py-1 w-full"
+            defaultValue={v.max ?? ""}
+            onBlur={(e) => onChange({ max: e.target.value ? Number(e.target.value) : undefined })}
+          />
+        </Field>
+      </div>
+      <Field label="단위">
+        <input
+          className="border rounded px-2 py-1 w-full"
+          placeholder="예: kg, 個"
+          defaultValue={v.unit ?? ""}
+          onBlur={(e) => onChange({ unit: e.target.value || undefined })}
+        />
+      </Field>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={v.thousandsSeparator ?? false}
+          onChange={(e) => onChange({ thousandsSeparator: e.target.checked })}
+        />
+        천 단위 구분 허용
+      </label>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
+        빈칸 허용
+      </label>
+    </>
+  );
+}
+
+function CheckConfigPanel({
+  value,
+  otherCheckFields,
+  onChange,
+}: {
+  value?: CheckConfig;
+  otherCheckFields: FieldDTO[];
+  onChange: (p: Partial<CheckConfig>) => void;
+}) {
+  const v = value ?? ({} as CheckConfig);
+  return (
+    <>
+      <Field label="판정 방식">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.mode ?? "symbol_classification"}
+          onChange={(e) => onChange({ mode: e.target.value as CheckConfig["mode"] })}
+        >
+          <option value="presence">체크 유무</option>
+          <option value="symbol_classification">true/false 기호</option>
+        </select>
+      </Field>
+      <Field label="true 표시 (쉼표 구분)">
+        <input
+          className="border rounded px-2 py-1 w-full"
+          defaultValue={(v.trueMarks ?? ["CHECK", "V"]).join(", ")}
+          onBlur={(e) => onChange({ trueMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+        />
+      </Field>
+      {v.mode === "symbol_classification" && (
+        <Field label="false 표시 (쉼표 구분)">
+          <input
+            className="border rounded px-2 py-1 w-full"
+            defaultValue={(v.falseMarks ?? ["X"]).join(", ")}
+            onBlur={(e) => onChange({ falseMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+          />
+        </Field>
+      )}
+      <Field label="빈칸 처리">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.blankValue ?? "null"}
+          onChange={(e) => onChange({ blankValue: e.target.value as CheckConfig["blankValue"] })}
+        >
+          <option value="null">null (미기재로 간주)</option>
+          <option value="false">false</option>
+          <option value="required_error">필수 오류</option>
+        </select>
+      </Field>
+      <Field label="애매한 표시">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.ambiguousPolicy ?? "always_review"}
+          onChange={(e) => onChange({ ambiguousPolicy: e.target.value as CheckConfig["ambiguousPolicy"] })}
+        >
+          <option value="always_review">항상 검수</option>
+          <option value="nearest_guess">가장 가까운 값 추천</option>
+        </select>
+      </Field>
+      <Field label="선택 영역">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.regionMode ?? "box"}
+          onChange={(e) => onChange({ regionMode: e.target.value as CheckConfig["regionMode"] })}
+        >
+          <option value="box">박스 내부</option>
+          <option value="full_area">영역 전체</option>
+        </select>
+      </Field>
+      {otherCheckFields.length === 0 && (
+        <p className="text-[11px] text-gray-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
+      )}
+    </>
+  );
+}
+
+function OcrConfigPanel({ value, onChange }: { value?: OcrConfig; onChange: (p: Partial<OcrConfig>) => void }) {
+  const v = value ?? ({} as OcrConfig);
+  return (
+    <>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.enabled ?? true} onChange={(e) => onChange({ enabled: e.target.checked })} />
+        OCR 사용
+      </label>
+      <Field label="형식 힌트">
+        <input
+          className="border rounded px-2 py-1 w-full"
+          placeholder="예: HH:mm"
+          defaultValue={v.formatHint ?? ""}
+          onBlur={(e) => onChange({ formatHint: e.target.value || undefined })}
+        />
+      </Field>
+      <Field label="저신뢰도 처리">
+        <select
+          className="border rounded px-2 py-1 w-full"
+          value={v.lowConfidencePolicy ?? "auto_flag"}
+          onChange={(e) => onChange({ lowConfidencePolicy: e.target.value as OcrConfig["lowConfidencePolicy"] })}
+        >
+          <option value="auto_flag">자동 표시(검수 필요로 표시)</option>
+          <option value="block_confirm">확정 차단</option>
+        </select>
+      </Field>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={v.autoRotate ?? true} onChange={(e) => onChange({ autoRotate: e.target.checked })} />
+        원본 이미지 자동 회전
+      </label>
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={v.contrastEnhance ?? false}
+          onChange={(e) => onChange({ contrastEnhance: e.target.checked })}
+        />
+        대비 강화
+      </label>
+    </>
   );
 }

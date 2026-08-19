@@ -155,6 +155,7 @@ model Field {
   templateVersion   TemplateVersion @relation(fields: [templateVersionId], references: [id])
   pageNo            Int         @map("page_no")
   label             String
+  description       String?
   dataKey           String      @map("data_key")
   type              FieldType
   // normalized 0~1 coordinates, page-relative (PRD 편집기 §8.4)

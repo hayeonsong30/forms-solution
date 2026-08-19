@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getCurrentVersion, NotFoundError } from "@/lib/template";
-import { createFieldSchema } from "@/lib/schemas";
+import { createFieldSchema, defaultConfigForType } from "@/lib/schemas";
 import { slugifyDataKey, withUniqueSuffix } from "@/lib/dataKey";
 
 export async function POST(req: Request, ctx: RouteContext<"/api/templates/[templateId]/fields">) {
@@ -28,6 +28,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
         templateVersionId: version.id,
         pageNo: parsed.data.pageNo,
         label: parsed.data.label,
+        description: parsed.data.description,
         dataKey,
         type: parsed.data.type,
         boxX: parsed.data.box.x,
@@ -37,7 +38,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
         required: parsed.data.required,
         source: "manual",
         status: "confirmed",
-        config: parsed.data.config as Prisma.InputJsonValue,
+        config: defaultConfigForType(parsed.data.type, parsed.data.config) as Prisma.InputJsonValue,
       },
     });
 
