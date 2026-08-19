@@ -21,6 +21,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
 
   try {
     const { version } = await getCurrentVersion(templateId);
+    if (!version.pdfData) {
+      return Response.json({ error: "PDF_REQUIRED" }, { status: 409 });
+    }
     const promptVersion = process.env.AI_PROMPT_VERSION ?? "form-v1";
 
     const job = await prisma.aiJob.create({

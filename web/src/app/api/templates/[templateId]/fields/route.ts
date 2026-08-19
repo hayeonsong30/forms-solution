@@ -14,6 +14,9 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
 
   try {
     const { version } = await getCurrentVersion(templateId);
+    if (!version.pdfData) {
+      return Response.json({ error: "PDF_REQUIRED" }, { status: 409 });
+    }
 
     const existingKeys = await existingDataKeys(version.id);
     const base = parsed.data.dataKey ? slugifyDataKey(parsed.data.dataKey) : slugifyDataKey(parsed.data.label);

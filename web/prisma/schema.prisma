@@ -138,6 +138,8 @@ model TemplateVersion {
   template   Template @relation("TemplateVersions", fields: [templateId], references: [id])
   versionNo  Int      @map("version_no")
   pageCount  Int      @map("page_count")
+  // 업로드한 원본 PDF (base64). PRD_양식편집기_상세 §8.0: PDF가 없으면 필드 추가·AI추천을 막는다.
+  pdfData    String?  @map("pdf_data")
   createdBy  String?  @map("created_by")
   createdAt  DateTime @default(now()) @map("created_at")
 

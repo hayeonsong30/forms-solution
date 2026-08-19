@@ -72,6 +72,7 @@ export type TemplateVersionDTO = {
   templateId: string;
   versionNo: number;
   pageCount: number;
+  hasPdf: boolean;
 };
 
 export type RepeatColumnDTO = {

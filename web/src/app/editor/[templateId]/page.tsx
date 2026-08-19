@@ -1,45 +1,50 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import type {
-  CheckConfig,
-  FieldDTO,
-  FieldIssue,
-  FieldType,
-  NumberConfig,
-  RepeatGroupDTO,
-  TemplateDetailResponse,
-  TextConfig,
-} from "@/types";
+import type { FieldDTO, FieldIssue, FieldType, RepeatGroupDTO, TemplateDetailResponse } from "@/types";
 import { Badge, Button } from "@/components/ui";
+import { LeftPanel } from "@/components/editor/LeftPanel";
+import { PdfUploadEmpty } from "@/components/editor/PdfUploadEmpty";
+import { PdfPageCanvas } from "@/components/editor/PdfPageCanvas";
+import { FieldPropertiesPanel, GroupPropertiesPanel } from "@/components/editor/PropertiesPanel";
+import { CreateRepeatGroupModal } from "@/components/editor/RepeatGroupModal";
+import { clamp } from "@/components/editor/configPanels";
+import { useCommandStack } from "@/lib/commandStack";
+import { arrayBufferToBase64 } from "@/lib/base64";
 
-const PAGE_RATIO = 297 / 210; // A4 세로 비율 (h/w)
 const DEFAULT_BOX = { w: 0.16, h: 0.04 };
+const CANVAS_TARGET_WIDTH = 760;
 
 type Tool = { mode: "select" } | { mode: "add"; type: FieldType };
 
-export default function EditorPage({
-  params,
-}: {
-  params: Promise<{ templateId: string }>;
-}) {
+export default function EditorPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = use(params);
 
   const [data, setData] = useState<TemplateDetailResponse | null>(null);
+  const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
+  const [pdfSize, setPdfSize] = useState<{ width: number; height: number } | null>(null);
+  const [pageNo, setPageNo] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [multiSelectIds, setMultiSelectIds] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [tool, setTool] = useState<Tool>({ mode: "select" });
+  const [dragType, setDragType] = useState<FieldType | null>(null);
   const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [showPosition, setShowPosition] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const stack = useCommandStack();
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/templates/${templateId}`);
     if (res.ok) setData(await res.json());
+  }, [templateId]);
+
+  const loadPdfBuffer = useCallback(async () => {
+    const res = await fetch(`/api/templates/${templateId}/pdf`);
+    if (res.ok) setPdfBuffer(await res.arrayBuffer());
   }, [templateId]);
 
   useEffect(() => {
@@ -47,26 +52,32 @@ export default function EditorPage({
     load();
   }, [load]);
 
-  const fields = data?.fields ?? [];
-  const repeatGroups = data?.repeatGroups ?? [];
-  const selected = fields.find((f) => f.id === selectedId) ?? null;
-  const selectedGroup = repeatGroups.find((g) => g.id === selectedGroupId) ?? null;
-  const otherCheckFields = fields.filter((f) => f.type === "check" && f.id !== selectedId);
+  useEffect(() => {
+    if (data?.version.hasPdf) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch the PDF once we know it exists
+      loadPdfBuffer();
+    }
+  }, [data?.version.hasPdf, loadPdfBuffer]);
+
+  const hasPdf = data?.version.hasPdf ?? false;
+  const allFields = data?.fields ?? [];
+  const fields = allFields.filter((f) => f.pageNo === pageNo);
+  const repeatGroups = (data?.repeatGroups ?? []).filter((g) => g.pageNo === pageNo);
+  const selected = allFields.find((f) => f.id === selectedId) ?? null;
+  const selectedGroup = (data?.repeatGroups ?? []).find((g) => g.id === selectedGroupId) ?? null;
+  const otherCheckFields = allFields.filter((f) => f.type === "check" && f.id !== selectedId);
 
   function patchLocalField(id: string, patch: Partial<FieldDTO>) {
     setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) } : d));
   }
 
   async function saveField(id: string, body: Record<string, unknown>) {
-    await fetch(`/api/templates/${templateId}/fields/${id}`, {
+    const res = await fetch(`/api/templates/${templateId}/fields/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-  }
-
-  async function saveBox(id: string, box: { x: number; y: number; w: number; h: number }) {
-    await saveField(id, { box });
+    if (res.ok) patchLocalField(id, await res.json());
   }
 
   function patchConfig<K extends "text" | "number" | "check">(
@@ -79,6 +90,15 @@ export default function EditorPage({
     saveField(field.id, { config: { [key]: patch } });
   }
 
+  // PRD_양식편집기_상세 §18 Phase 0: 상태 변경은 undo 가능한 명령으로 구현한다.
+  function runFieldPatchCommand(field: FieldDTO, body: Record<string, unknown>, prevBody: Record<string, unknown>) {
+    stack.run({
+      label: "필드 속성 변경",
+      do: () => saveField(field.id, body),
+      undo: () => saveField(field.id, prevBody),
+    });
+  }
+
   async function createField(x: number, y: number, type: FieldType) {
     const box = {
       x: clamp(x - DEFAULT_BOX.w / 2, 0, 1 - DEFAULT_BOX.w),
@@ -86,22 +106,67 @@ export default function EditorPage({
       w: DEFAULT_BOX.w,
       h: DEFAULT_BOX.h,
     };
+    const label = type === "text" ? "새 텍스트" : type === "number" ? "새 숫자" : "새 체크";
+    let createdId: string | null = null;
+    await stack.run({
+      label: "필드 생성",
+      do: async () => {
+        const res = await fetch(`/api/templates/${templateId}/fields`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pageNo, label, type, box, required: false }),
+        });
+        if (res.ok) {
+          const field: FieldDTO = await res.json();
+          createdId = field.id;
+          await load();
+          setSelectedId(field.id);
+          setTool({ mode: "select" });
+        }
+      },
+      undo: async () => {
+        if (!createdId) return;
+        await fetch(`/api/templates/${templateId}/fields/${createdId}`, { method: "DELETE" });
+        setSelectedId(null);
+        await load();
+      },
+    });
+  }
+
+  async function duplicateSelected() {
+    if (!selected) return;
+    const offset = 0.012;
+    const box = {
+      x: clamp(selected.boxX + offset, 0, 1 - selected.boxW),
+      y: clamp(selected.boxY + offset, 0, 1 - selected.boxH),
+      w: selected.boxW,
+      h: selected.boxH,
+    };
     const res = await fetch(`/api/templates/${templateId}/fields`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        pageNo: 1,
-        label: type === "text" ? "새 텍스트 필드" : type === "number" ? "새 숫자 필드" : "새 체크 필드",
-        type,
+        pageNo: selected.pageNo,
+        label: `${selected.label} 복사`,
+        type: selected.type,
         box,
-        required: false,
+        required: selected.required,
+        config: selected.config,
       }),
     });
     if (res.ok) {
       const field: FieldDTO = await res.json();
+      stack.record({
+        label: "필드 복사",
+        do: () => {},
+        undo: async () => {
+          await fetch(`/api/templates/${templateId}/fields/${field.id}`, { method: "DELETE" });
+          setSelectedId(null);
+          await load();
+        },
+      });
       await load();
       setSelectedId(field.id);
-      setTool({ mode: "select" });
     }
   }
 
@@ -118,7 +183,7 @@ export default function EditorPage({
     if (res.ok) patchLocalGroup(id, await res.json());
   }
 
-  function selectField(id: string, shiftKey: boolean) {
+  function selectField(id: string, shiftKey = false) {
     setSelectedGroupId(null);
     if (shiftKey) {
       setSelectedId(null);
@@ -148,6 +213,15 @@ export default function EditorPage({
     });
     if (res.ok) {
       const group = await res.json();
+      stack.record({
+        label: "반복행 생성",
+        do: () => {},
+        undo: async () => {
+          await fetch(`/api/templates/${templateId}/repeat-groups/${group.id}`, { method: "DELETE" });
+          setSelectedGroupId(null);
+          await load();
+        },
+      });
       setMultiSelectIds([]);
       setGroupModalOpen(false);
       await load();
@@ -188,31 +262,64 @@ export default function EditorPage({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       const g = data?.repeatGroups.find((x) => x.id === group.id);
-      if (g) saveGroup(group.id, { area: { x: g.areaX, y: g.areaY, w: g.areaW } });
+      if (g && (g.areaX !== start.x || g.areaY !== start.y)) {
+        stack.record({
+          label: "반복행 이동",
+          do: () => saveGroup(group.id, { area: { x: g.areaX, y: g.areaY, w: g.areaW } }),
+          undo: () => saveGroup(group.id, { area: { x: start.x, y: start.y, w: g.areaW } }),
+        });
+      }
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   }
 
-  async function deleteSelected() {
-    if (!selected) return;
-    const res = await fetch(`/api/templates/${templateId}/fields/${selected.id}`, { method: "DELETE" });
+  async function deleteField(field: FieldDTO) {
+    const snapshot = { ...field };
+    const res = await fetch(`/api/templates/${templateId}/fields/${field.id}`, { method: "DELETE" });
     if (res.ok) {
-      setSelectedId(null);
+      if (selectedId === field.id) setSelectedId(null);
+      stack.record({
+        label: "필드 삭제",
+        do: () => {},
+        undo: async () => {
+          const r = await fetch(`/api/templates/${templateId}/fields`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              pageNo: snapshot.pageNo,
+              label: snapshot.label,
+              dataKey: snapshot.dataKey,
+              type: snapshot.type,
+              box: { x: snapshot.boxX, y: snapshot.boxY, w: snapshot.boxW, h: snapshot.boxH },
+              required: snapshot.required,
+              config: snapshot.config,
+            }),
+          });
+          if (r.ok) await load();
+        },
+      });
       await load();
     } else if (res.status === 409) {
       setActionError("잠긴 필드는 삭제할 수 없습니다.");
     }
   }
 
-  async function runAiDetection(dataUri: string) {
+  async function runAiDetection() {
+    if (!pdfBuffer) return;
     setActionError(null);
     setAiBusy(true);
     try {
+      const canvas = document.createElement("canvas");
+      const { loadPdf, renderPageToCanvas } = await import("@/lib/pdf");
+      const pdf = await loadPdf(pdfBuffer.slice(0));
+      await renderPageToCanvas(pdf, pageNo, canvas, 1600, () => false);
+      const dataUri = canvas.toDataURL("image/png");
+
       const res = await fetch(`/api/templates/${templateId}/ai-detection`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageDataUri: dataUri, pageNo: 1 }),
+        body: JSON.stringify({ imageDataUri: dataUri, pageNo }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -225,26 +332,12 @@ export default function EditorPage({
     }
   }
 
-  function handleAiFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => runAiDetection(reader.result as string);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  }
-
   async function acceptSuggested(field: FieldDTO) {
     await saveField(field.id, { status: "confirmed" });
-    await load();
   }
 
   async function rejectSuggested(field: FieldDTO) {
-    const res = await fetch(`/api/templates/${templateId}/fields/${field.id}`, { method: "DELETE" });
-    if (res.ok) {
-      if (selectedId === field.id) setSelectedId(null);
-      await load();
-    }
+    await deleteField(field);
   }
 
   async function runValidate() {
@@ -266,19 +359,54 @@ export default function EditorPage({
     await load();
   }
 
+  async function uploadPdf(file: File) {
+    setUploadBusy(true);
+    setActionError(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const { loadPdf } = await import("@/lib/pdf");
+      const pdf = await loadPdf(buffer.slice(0));
+      const pdfDataUri = `data:application/pdf;base64,${arrayBufferToBase64(buffer)}`;
+      const res = await fetch(`/api/templates/${templateId}/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfDataUri, pageCount: pdf.numPages }),
+      });
+      if (!res.ok) {
+        setActionError("PDF 업로드에 실패했습니다.");
+        return;
+      }
+      setPageNo(1);
+      await load();
+      await loadPdfBuffer();
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
+  function computeCanvasPoint(clientX: number, clientY: number): { x: number; y: number } | null {
+    if (!canvasRef.current) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
+    return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
+  }
+
   function handleCanvasClick(e: React.MouseEvent<HTMLDivElement>) {
     if (tool.mode !== "add") {
-      if (!canvasRef.current) return;
       setSelectedId(null);
       setSelectedGroupId(null);
       if (!e.shiftKey) setMultiSelectIds([]);
       return;
     }
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    createField(x, y, tool.type);
+    const pt = computeCanvasPoint(e.clientX, e.clientY);
+    if (pt) createField(pt.x, pt.y, tool.type);
+  }
+
+  function handleCanvasDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    if (!dragType) return;
+    const pt = computeCanvasPoint(e.clientX, e.clientY);
+    if (pt) createField(pt.x, pt.y, dragType);
+    setDragType(null);
   }
 
   function startDrag(field: FieldDTO, e: React.PointerEvent, mode: "move" | "resize") {
@@ -308,418 +436,256 @@ export default function EditorPage({
     function onUp() {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      const f = data?.fields.find((x) => x.id === field.id);
-      if (f) saveBox(field.id, { x: f.boxX, y: f.boxY, w: f.boxW, h: f.boxH });
+      setData((d) => {
+        const f = d?.fields.find((x) => x.id === field.id);
+        if (f && (f.boxX !== start.x || f.boxY !== start.y || f.boxW !== start.w || f.boxH !== start.h)) {
+          const next = { x: f.boxX, y: f.boxY, w: f.boxW, h: f.boxH };
+          stack.record({
+            label: mode === "move" ? "필드 이동" : "필드 크기 조절",
+            do: () => saveField(field.id, { box: next }),
+            undo: () => saveField(field.id, { box: start }),
+          });
+        }
+        return d;
+      });
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   }
 
+  // 방향키 이동 (Shift = 큰 단위), Delete 삭제, Cmd/Ctrl+Z undo, Cmd/Ctrl+Shift+Z redo, Cmd/Ctrl+D 복제
+  useEffect(() => {
+    function isFormTarget(el: EventTarget | null) {
+      return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (isFormTarget(e.target)) return;
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) stack.redo();
+        else stack.undo();
+        return;
+      }
+      if (meta && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        duplicateSelected();
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selected) {
+        e.preventDefault();
+        deleteField(selected);
+        return;
+      }
+      if (selected && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+        const step = e.shiftKey ? 0.01 : 0.002;
+        const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+        const next = { x: clamp(selected.boxX + dx, 0, 1 - selected.boxW), y: clamp(selected.boxY + dy, 0, 1 - selected.boxH), w: selected.boxW, h: selected.boxH };
+        patchLocalField(selected.id, { boxX: next.x, boxY: next.y });
+        saveField(selected.id, { box: next });
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bind whenever selection/stack identity changes
+  }, [selected, stack]);
+
   if (!data) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
 
   return (
-    <main className="flex h-full">
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-[var(--color-border)] px-4 py-2.5 flex items-center gap-2">
-          <h1 className="font-semibold text-sm mr-2 truncate max-w-48">{data.template.name}</h1>
-          <ToolButton active={tool.mode === "select"} onClick={() => setTool({ mode: "select" })}>
-            선택
-          </ToolButton>
-          <ToolButton
-            active={tool.mode === "add" && tool.type === "text"}
-            onClick={() => setTool({ mode: "add", type: "text" })}
-          >
-            + 텍스트
-          </ToolButton>
-          <ToolButton
-            active={tool.mode === "add" && tool.type === "number"}
-            onClick={() => setTool({ mode: "add", type: "number" })}
-          >
-            + 숫자
-          </ToolButton>
-          <ToolButton
-            active={tool.mode === "add" && tool.type === "check"}
-            onClick={() => setTool({ mode: "add", type: "check" })}
-          >
-            + 체크
-          </ToolButton>
-          {multiSelectIds.length > 0 && (
-            <button
-              className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer"
-              onClick={() => setGroupModalOpen(true)}
-            >
-              반복행으로 묶기 ({multiSelectIds.length})
-            </button>
-          )}
-          <label className="text-sm border border-violet-300 text-violet-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer">
-            {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
-            <input type="file" accept="image/*" className="hidden" onChange={handleAiFile} disabled={aiBusy} />
-          </label>
-          <div className="flex-1" />
-          <Button onClick={runValidate}>검사</Button>
-          <Button variant="primary" onClick={activate}>
-            인쇄 가능으로 전환
-          </Button>
-          <Badge tone={data.template.printable ? "green" : "amber"}>
-            {data.template.printable ? "인쇄 가능" : (data.template.printableReason ?? "편집 중")}
-          </Badge>
-        </header>
+    <main className="flex flex-col h-full">
+      <header className="bg-white border-b border-[var(--color-border)] px-4 py-2.5 flex items-center gap-2">
+        <h1 className="font-semibold text-sm mr-2 truncate max-w-48">{data.template.name}</h1>
+        <span className="text-xs text-slate-400 mr-2">{pageNo} / {data.version.pageCount}페이지</span>
+        <ToolButton active={tool.mode === "select"} onClick={() => setTool({ mode: "select" })}>
+          선택
+        </ToolButton>
+        <div className="w-px h-5 bg-[var(--color-border)] mx-1" />
+        <Button onClick={() => stack.undo()} disabled={!stack.canUndo} title="실행 취소 (Cmd/Ctrl+Z)">
+          ↶
+        </Button>
+        <Button onClick={() => stack.redo()} disabled={!stack.canRedo} title="다시 실행 (Cmd/Ctrl+Shift+Z)">
+          ↷
+        </Button>
+        {multiSelectIds.length > 0 && (
+          <button className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer" onClick={() => setGroupModalOpen(true)}>
+            반복행으로 묶기 ({multiSelectIds.length})
+          </button>
+        )}
+        <button
+          className="text-sm border border-violet-300 text-violet-700 rounded-lg px-3 py-1.5 font-medium cursor-pointer disabled:opacity-40"
+          onClick={runAiDetection}
+          disabled={!hasPdf || aiBusy}
+        >
+          {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
+        </button>
+        <div className="flex-1" />
+        <Button onClick={runValidate}>검사</Button>
+        <Button variant="primary" onClick={activate}>
+          인쇄 가능으로 전환
+        </Button>
+        <Badge tone={data.template.printable ? "green" : "amber"}>
+          {data.template.printable ? "인쇄 가능" : (data.template.printableReason ?? "편집 중")}
+        </Badge>
+      </header>
 
-        {(issues.length > 0 || actionError) && (
-          <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
-            {actionError && <div>{actionError}</div>}
-            {issues.map((i, idx) => (
-              <div key={idx}>{i.message}</div>
-            ))}
+      {(issues.length > 0 || actionError) && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2 text-sm text-red-700">
+          {actionError && <div>{actionError}</div>}
+          {issues.map((i, idx) => (
+            <div key={idx}>{i.message}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex-1 flex min-h-0">
+        <LeftPanel
+          disabled={!hasPdf}
+          fields={fields}
+          repeatGroups={repeatGroups}
+          selectedId={selectedId}
+          selectedGroupId={selectedGroupId}
+          onSelectField={(id) => selectField(id)}
+          onSelectGroup={selectGroup}
+          onToggleHidden={(f) => runFieldPatchCommand(f, { hidden: !f.hidden }, { hidden: f.hidden })}
+          onToggleLocked={(f) => runFieldPatchCommand(f, { locked: !f.locked }, { locked: f.locked })}
+          onDeleteField={deleteField}
+          onArmAdd={(type) => setTool(type ? { mode: "add", type } : { mode: "select" })}
+          armedType={tool.mode === "add" ? tool.type : null}
+          onDragCardStart={setDragType}
+          onGroupCardClick={() => (multiSelectIds.length > 0 ? setGroupModalOpen(true) : setActionError("먼저 첫 행 필드를 다중 선택하세요 (Shift+클릭)."))}
+          onReplacePdf={uploadPdf}
+        />
+
+        {!hasPdf ? (
+          <PdfUploadEmpty onUpload={uploadPdf} />
+        ) : (
+          <div className="flex-1 overflow-auto bg-slate-100 p-8">
+            {uploadBusy && <p className="text-sm text-slate-400 mb-2">PDF 업로드 중…</p>}
+            {!pdfBuffer ? (
+              <p className="text-sm text-slate-400">PDF 불러오는 중…</p>
+            ) : (
+              <div
+                ref={canvasRef}
+                onClick={handleCanvasClick}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleCanvasDrop}
+                className="relative bg-white shadow mx-auto"
+                style={{
+                  width: pdfSize?.width ?? CANVAS_TARGET_WIDTH,
+                  height: pdfSize?.height,
+                  cursor: tool.mode === "add" ? "crosshair" : "default",
+                }}
+              >
+                <PdfPageCanvas pdfBuffer={pdfBuffer} pageNo={pageNo} width={CANVAS_TARGET_WIDTH} onSize={setPdfSize} />
+                <div className="absolute inset-0">
+                  {repeatGroups.map((g) => (
+                    <div
+                      key={g.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        selectGroup(g.id);
+                      }}
+                      onPointerDown={(e) => startGroupDrag(g, e)}
+                      className={`absolute border-2 overflow-hidden select-none ${
+                        g.id === selectedGroupId ? "border-teal-600 bg-teal-50/40" : "border-teal-400 bg-teal-50/20"
+                      }`}
+                      style={{
+                        left: `${g.areaX * 100}%`,
+                        top: `${g.areaY * 100}%`,
+                        width: `${g.areaW * 100}%`,
+                        height: `${g.areaH * 100}%`,
+                        backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent ${
+                          (g.rowHeight / g.areaH) * 100 - 0.3
+                        }%, rgba(13,148,136,0.4) ${(g.rowHeight / g.areaH) * 100 - 0.3}%, rgba(13,148,136,0.4) ${
+                          (g.rowHeight / g.areaH) * 100
+                        }%)`,
+                      }}
+                    >
+                      <span className="absolute -top-5 left-0 text-[10px] text-teal-700 bg-white/80 px-1">
+                        {g.label} × {g.maxRows}
+                      </span>
+                    </div>
+                  ))}
+                  {fields.map((f) =>
+                    f.hidden ? null : (
+                      <div
+                        key={f.id}
+                        onClick={(e) => selectField(f.id, e.shiftKey)}
+                        onPointerDown={(e) => startDrag(f, e, "move")}
+                        className={`absolute border-2 text-[10px] px-1 overflow-hidden select-none ${
+                          multiSelectIds.includes(f.id)
+                            ? "border-amber-500 bg-amber-50/70"
+                            : f.id === selectedId
+                              ? "border-[var(--color-brand-600)] bg-[var(--color-brand-50)]/70"
+                              : f.status === "suggested"
+                                ? "border-dashed border-violet-500 bg-violet-50/50"
+                                : "border-slate-400 bg-white/60"
+                        }`}
+                        style={{
+                          left: `${f.boxX * 100}%`,
+                          top: `${f.boxY * 100}%`,
+                          width: `${f.boxW * 100}%`,
+                          height: `${f.boxH * 100}%`,
+                        }}
+                      >
+                        {f.locked && <span className="mr-0.5">🔒</span>}
+                        {f.label}
+                        {f.id === selectedId && !f.locked && (
+                          <div
+                            onPointerDown={(e) => startDrag(f, e, "resize")}
+                            className="absolute -right-1 -bottom-1 w-3 h-3 bg-[var(--color-brand-600)] cursor-se-resize"
+                          />
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        <div className="flex-1 overflow-auto bg-slate-100 p-8">
-          <div
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            className="relative bg-white shadow mx-auto"
-            style={{ width: 640, height: 640 * PAGE_RATIO, cursor: tool.mode === "add" ? "crosshair" : "default" }}
-          >
-            {repeatGroups.map((g) => (
-              <div
-                key={g.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  selectGroup(g.id);
-                }}
-                onPointerDown={(e) => startGroupDrag(g, e)}
-                className={`absolute border-2 overflow-hidden select-none ${
-                  g.id === selectedGroupId ? "border-teal-600 bg-teal-50/40" : "border-teal-400 bg-teal-50/20"
-                }`}
-                style={{
-                  left: `${g.areaX * 100}%`,
-                  top: `${g.areaY * 100}%`,
-                  width: `${g.areaW * 100}%`,
-                  height: `${g.areaH * 100}%`,
-                  backgroundImage: `repeating-linear-gradient(to bottom, transparent, transparent ${
-                    (g.rowHeight / g.areaH) * 100 - 0.3
-                  }%, rgba(13,148,136,0.4) ${(g.rowHeight / g.areaH) * 100 - 0.3}%, rgba(13,148,136,0.4) ${
-                    (g.rowHeight / g.areaH) * 100
-                  }%)`,
-                }}
-              >
-                <span className="absolute -top-5 left-0 text-[10px] text-teal-700 bg-white/80 px-1">
-                  {g.label} × {g.maxRows}
-                </span>
-              </div>
-            ))}
-            {fields.map((f) => (
-              <div
-                key={f.id}
-                onClick={(e) => selectField(f.id, e.shiftKey)}
-                onPointerDown={(e) => startDrag(f, e, "move")}
-                className={`absolute border-2 text-[10px] px-1 overflow-hidden select-none ${
-                  multiSelectIds.includes(f.id)
-                    ? "border-amber-500 bg-amber-50/70"
-                    : f.id === selectedId
-                      ? "border-[var(--color-brand-600)] bg-[var(--color-brand-50)]/70"
-                      : f.status === "suggested"
-                        ? "border-dashed border-violet-500 bg-violet-50/50"
-                        : "border-slate-400 bg-white/60"
-                }`}
-                style={{
-                  left: `${f.boxX * 100}%`,
-                  top: `${f.boxY * 100}%`,
-                  width: `${f.boxW * 100}%`,
-                  height: `${f.boxH * 100}%`,
-                }}
-              >
-                {f.label}
-                {f.id === selectedId && !f.locked && (
-                  <div
-                    onPointerDown={(e) => startDrag(f, e, "resize")}
-                    className="absolute -right-1 -bottom-1 w-3 h-3 bg-[var(--color-brand-600)] cursor-se-resize"
-                  />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <aside className="w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto">
+          {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">필드를 선택하세요.</p>}
+          {selectedGroup && (
+            <GroupPropertiesPanel
+              group={selectedGroup}
+              onPatchLocal={(patch) => patchLocalGroup(selectedGroup.id, patch)}
+              onSave={(body) => saveGroup(selectedGroup.id, body)}
+              onUngroup={ungroupSelected}
+            />
+          )}
+          {selected && (
+            <FieldPropertiesPanel
+              field={selected}
+              otherCheckFields={otherCheckFields}
+              onPatchLocal={(patch) => patchLocalField(selected.id, patch)}
+              onSave={(body) => saveField(selected.id, body)}
+              onSaveType={(type) => saveField(selected.id, { type }).then(load)}
+              onPatchConfig={(key, patch) => patchConfig(selected, key, patch)}
+              onAccept={() => acceptSuggested(selected)}
+              onReject={() => rejectSuggested(selected)}
+              onDelete={() => deleteField(selected)}
+            />
+          )}
+        </aside>
       </div>
 
-      <aside className="w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto">
-        {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">필드를 선택하세요.</p>}
-        {selectedGroup && (
-          <div className="divide-y">
-            <Section title="반복행 속성">
-              <Field label="그룹명">
-                <input
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selectedGroup.label}
-                  onChange={(e) => patchLocalGroup(selectedGroup.id, { label: e.target.value })}
-                  onBlur={() => saveGroup(selectedGroup.id, { label: selectedGroup.label })}
-                />
-              </Field>
-              <Field label="그룹 데이터 키">
-                <input
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selectedGroup.dataKey}
-                  onChange={(e) => patchLocalGroup(selectedGroup.id, { dataKey: e.target.value })}
-                  onBlur={() => saveGroup(selectedGroup.id, { dataKey: selectedGroup.dataKey })}
-                />
-              </Field>
-              <Field label="최대 행 수">
-                <input
-                  type="number"
-                  min={1}
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selectedGroup.maxRows}
-                  onChange={(e) => patchLocalGroup(selectedGroup.id, { maxRows: Number(e.target.value) })}
-                  onBlur={() => saveGroup(selectedGroup.id, { maxRows: selectedGroup.maxRows })}
-                />
-              </Field>
-              <Field label="빈 행 처리">
-                <select
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selectedGroup.blankRowPolicy}
-                  onChange={(e) => {
-                    const blankRowPolicy = e.target.value as "exclude" | "include";
-                    patchLocalGroup(selectedGroup.id, { blankRowPolicy });
-                    saveGroup(selectedGroup.id, { blankRowPolicy });
-                  }}
-                >
-                  <option value="exclude">빈 행 제외</option>
-                  <option value="include">빈 행 포함</option>
-                </select>
-              </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selectedGroup.useRowNumber}
-                  onChange={(e) => {
-                    patchLocalGroup(selectedGroup.id, { useRowNumber: e.target.checked });
-                    saveGroup(selectedGroup.id, { useRowNumber: e.target.checked });
-                  }}
-                />
-                행 번호 사용
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selectedGroup.allowDuplicate}
-                  onChange={(e) => {
-                    patchLocalGroup(selectedGroup.id, { allowDuplicate: e.target.checked });
-                    saveGroup(selectedGroup.id, { allowDuplicate: e.target.checked });
-                  }}
-                />
-                중복 허용
-              </label>
-            </Section>
-            <Section title="열 구성 (첫 행 기준, 좌→우)">
-              <ul className="space-y-1">
-                {selectedGroup.columns.map((c) => (
-                  <li key={c.id} className="text-xs border rounded px-2 py-1 flex justify-between">
-                    <span>{c.label}</span>
-                    <span className="text-slate-400">
-                      {c.dataKey} · {c.type}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-            <div className="p-4">
-              <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={ungroupSelected}>
-                반복행 해제 (첫 행 필드로 되돌리기)
-              </button>
-            </div>
-          </div>
-        )}
-        {selected && (
-          <div className="divide-y">
-            <Section title="기본 정보">
-              <Field label="필드명">
-                <input
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selected.label}
-                  disabled={selected.locked}
-                  onChange={(e) => patchLocalField(selected.id, { label: e.target.value })}
-                  onBlur={() => saveField(selected.id, { label: selected.label })}
-                />
-              </Field>
-              <Field label="데이터 키">
-                <input
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)] disabled:bg-slate-50 disabled:text-slate-400"
-                  value={selected.dataKey}
-                  disabled={selected.locked}
-                  onChange={(e) => patchLocalField(selected.id, { dataKey: e.target.value })}
-                  onBlur={() => saveField(selected.id, { dataKey: selected.dataKey })}
-                />
-                <p className="text-[11px] text-slate-400 mt-1">편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.</p>
-              </Field>
-              <Field label="데이터 유형">
-                <select
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selected.type}
-                  disabled={selected.locked}
-                  onChange={(e) => {
-                    const type = e.target.value as FieldType;
-                    saveField(selected.id, { type }).then(load);
-                  }}
-                >
-                  <option value="text">텍스트</option>
-                  <option value="number">숫자</option>
-                  <option value="check">체크 판정</option>
-                </select>
-              </Field>
-              <Field label="설명">
-                <textarea
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  rows={2}
-                  value={selected.description ?? ""}
-                  onChange={(e) => patchLocalField(selected.id, { description: e.target.value })}
-                  onBlur={() => saveField(selected.id, { description: selected.description ?? "" })}
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.required}
-                  onChange={(e) => {
-                    patchLocalField(selected.id, { required: e.target.checked });
-                    saveField(selected.id, { required: e.target.checked });
-                  }}
-                />
-                필수 필드
-              </label>
-              {selected.status === "suggested" && (
-                <div className="bg-violet-50 border border-violet-200 rounded p-2 space-y-2">
-                  <p className="text-xs text-violet-700">AI가 제안한 필드입니다. 검수 후 채택하거나 거부하세요.</p>
-                  <div className="flex gap-2">
-                    <button
-                      className="text-sm bg-violet-600 text-white rounded px-3 py-1 flex-1"
-                      onClick={() => acceptSuggested(selected)}
-                    >
-                      채택
-                    </button>
-                    <button
-                      className="text-sm border border-violet-300 text-violet-700 rounded px-3 py-1 flex-1"
-                      onClick={() => rejectSuggested(selected)}
-                    >
-                      거부
-                    </button>
-                  </div>
-                </div>
-              )}
-            </Section>
-
-            <Section title="유형별 설정">
-              {selected.type === "text" && (
-                <TextConfigPanel value={selected.config.text} onChange={(patch) => patchConfig(selected, "text", patch)} />
-              )}
-              {selected.type === "number" && (
-                <NumberConfigPanel
-                  value={selected.config.number}
-                  onChange={(patch) => patchConfig(selected, "number", patch)}
-                />
-              )}
-              {selected.type === "check" && (
-                <CheckConfigPanel
-                  value={selected.config.check}
-                  otherCheckFields={otherCheckFields}
-                  onChange={(patch) => patchConfig(selected, "check", patch)}
-                />
-              )}
-            </Section>
-
-            <Section
-              title="위치·크기"
-              collapsible
-              collapsed={!showPosition}
-              onToggle={() => setShowPosition((v) => !v)}
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <PercentField
-                  label="X"
-                  value={selected.boxX}
-                  onCommit={(v) => saveBox(selected.id, { x: v, y: selected.boxY, w: selected.boxW, h: selected.boxH })}
-                />
-                <PercentField
-                  label="Y"
-                  value={selected.boxY}
-                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: v, w: selected.boxW, h: selected.boxH })}
-                />
-                <PercentField
-                  label="Width"
-                  value={selected.boxW}
-                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: selected.boxY, w: v, h: selected.boxH })}
-                />
-                <PercentField
-                  label="Height"
-                  value={selected.boxH}
-                  onCommit={(v) => saveBox(selected.id, { x: selected.boxX, y: selected.boxY, w: selected.boxW, h: v })}
-                />
-              </div>
-              <Field label="페이지">
-                <input
-                  type="number"
-                  min={1}
-                  className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                  value={selected.pageNo}
-                  onChange={(e) => patchLocalField(selected.id, { pageNo: Number(e.target.value) })}
-                  onBlur={() => saveField(selected.id, { pageNo: selected.pageNo })}
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={selected.locked}
-                  onChange={(e) => {
-                    patchLocalField(selected.id, { locked: e.target.checked });
-                    saveField(selected.id, { locked: e.target.checked });
-                  }}
-                />
-                잠금 (위치·유형·데이터 키 변경 방지)
-              </label>
-            </Section>
-
-            {selected.type === "check" && (
-              <Section title="검증">
-                <Field label="교차 검증 (동시 true 불가 대상)">
-                  <select
-                    className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-                    value={selected.config.check?.exclusiveWithFieldId ?? ""}
-                    onChange={(e) => patchConfig(selected, "check", { exclusiveWithFieldId: e.target.value || undefined })}
-                  >
-                    <option value="">없음</option>
-                    {otherCheckFields.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.label} ({f.dataKey})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-slate-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
-                </Field>
-              </Section>
-            )}
-
-            <div className="p-4">
-              <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={deleteSelected}>
-                필드 삭제
-              </button>
-            </div>
-          </div>
-        )}
-      </aside>
+      <footer className="bg-white border-t border-[var(--color-border)] px-4 py-1.5 flex items-center gap-4 text-xs text-slate-400">
+        <span>페이지 {pageNo}/{data.version.pageCount}</span>
+        <span>선택 {selectedId || selectedGroupId ? 1 : multiSelectIds.length}개</span>
+        <span>오류 {issues.length}개</span>
+        <span>정규화 좌표 (0~1)</span>
+      </footer>
 
       {groupModalOpen && (
-        <CreateRepeatGroupModal
-          fieldCount={multiSelectIds.length}
-          onCancel={() => setGroupModalOpen(false)}
-          onCreate={createRepeatGroup}
-        />
+        <CreateRepeatGroupModal fieldCount={multiSelectIds.length} onCancel={() => setGroupModalOpen(false)} onCreate={createRepeatGroup} />
       )}
     </main>
   );
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(Math.max(v, min), Math.max(min, max));
 }
 
 function ToolButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -727,351 +693,10 @@ function ToolButton({ active, onClick, children }: { active: boolean; onClick: (
     <button
       onClick={onClick}
       className={`text-sm rounded-lg px-3 py-1.5 font-medium border cursor-pointer ${
-        active
-          ? "bg-[var(--color-brand-600)] text-white border-[var(--color-brand-600)]"
-          : "border-[var(--color-border)] hover:bg-slate-50"
+        active ? "bg-[var(--color-brand-600)] text-white border-[var(--color-brand-600)]" : "border-[var(--color-border)] hover:bg-slate-50"
       }`}
     >
       {children}
     </button>
   );
 }
-
-function Section({
-  title,
-  children,
-  collapsible,
-  collapsed,
-  onToggle,
-}: {
-  title: string;
-  children: React.ReactNode;
-  collapsible?: boolean;
-  collapsed?: boolean;
-  onToggle?: () => void;
-}) {
-  return (
-    <div className="p-4">
-      <button
-        className="flex items-center justify-between w-full text-left font-medium text-sm mb-3"
-        onClick={collapsible ? onToggle : undefined}
-      >
-        {title}
-        {collapsible && <span className="text-slate-400">{collapsed ? "▸" : "▾"}</span>}
-      </button>
-      {(!collapsible || !collapsed) && <div className="space-y-3 text-sm">{children}</div>}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-slate-400 mb-1">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function PercentField({ label, value, onCommit }: { label: string; value: number; onCommit: (v: number) => void }) {
-  const [local, setLocal] = useState((value * 100).toFixed(1));
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync local edit buffer when box changes externally (drag)
-    setLocal((value * 100).toFixed(1));
-  }, [value]);
-  return (
-    <Field label={`${label} (%)`}>
-      <input
-        type="number"
-        step={0.1}
-        className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-        value={local}
-        onChange={(e) => setLocal(e.target.value)}
-        onBlur={() => {
-          const n = Number(local);
-          if (!Number.isNaN(n)) onCommit(clamp(n / 100, 0, 1));
-        }}
-      />
-    </Field>
-  );
-}
-
-function TextConfigPanel({ value, onChange }: { value?: TextConfig; onChange: (p: Partial<TextConfig>) => void }) {
-  const v = value ?? ({} as TextConfig);
-  return (
-    <>
-      <Field label="작성 형태">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.writingMode ?? "single"}
-          onChange={(e) => onChange({ writingMode: e.target.value as TextConfig["writingMode"] })}
-        >
-          <option value="single">한 줄</option>
-          <option value="multiline">여러 줄</option>
-        </select>
-      </Field>
-      <Field label="인식 언어">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.language ?? "ja"}
-          onChange={(e) => onChange({ language: e.target.value as TextConfig["language"] })}
-        >
-          <option value="ja">일본어</option>
-          <option value="ko">한국어</option>
-          <option value="en">영어</option>
-          <option value="auto">자동</option>
-        </select>
-      </Field>
-      <Field label="문자 정책">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.charPolicy ?? "all"}
-          onChange={(e) => onChange({ charPolicy: e.target.value as TextConfig["charPolicy"] })}
-        >
-          <option value="all">모든 문자</option>
-          <option value="numeric_included">숫자 포함 문자</option>
-          <option value="alnum">영숫자</option>
-          <option value="custom_pattern">사용자 패턴</option>
-        </select>
-      </Field>
-      {v.charPolicy === "custom_pattern" && (
-        <Field label="사용자 패턴 (정규식)">
-          <input
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            defaultValue={v.customPattern ?? ""}
-            onBlur={(e) => onChange({ customPattern: e.target.value })}
-          />
-        </Field>
-      )}
-      <Field label="최대 길이">
-        <input
-          type="number"
-          min={1}
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          defaultValue={v.maxLength ?? ""}
-          onBlur={(e) => onChange({ maxLength: e.target.value ? Number(e.target.value) : undefined })}
-        />
-      </Field>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.preserveWhitespace ?? false} onChange={(e) => onChange({ preserveWhitespace: e.target.checked })} />
-        공백 보존
-      </label>
-      {v.writingMode === "multiline" && (
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={v.preserveNewline ?? false} onChange={(e) => onChange({ preserveNewline: e.target.checked })} />
-          줄바꿈 보존
-        </label>
-      )}
-    </>
-  );
-}
-
-function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; onChange: (p: Partial<NumberConfig>) => void }) {
-  const v = value ?? ({} as NumberConfig);
-  return (
-    <>
-      <Field label="숫자 형식">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.numberFormat ?? "integer"}
-          onChange={(e) => onChange({ numberFormat: e.target.value as NumberConfig["numberFormat"] })}
-        >
-          <option value="integer">정수</option>
-          <option value="decimal">소수</option>
-        </select>
-      </Field>
-      {v.numberFormat === "decimal" && (
-        <Field label="소수 자릿수 (0~6)">
-          <input
-            type="number"
-            min={0}
-            max={6}
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            defaultValue={v.decimalPlaces ?? 0}
-            onBlur={(e) => onChange({ decimalPlaces: Number(e.target.value) })}
-          />
-        </Field>
-      )}
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.allowNegative ?? false} onChange={(e) => onChange({ allowNegative: e.target.checked })} />
-        음수 허용
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="최소">
-          <input
-            type="number"
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            defaultValue={v.min ?? ""}
-            onBlur={(e) => onChange({ min: e.target.value ? Number(e.target.value) : undefined })}
-          />
-        </Field>
-        <Field label="최대">
-          <input
-            type="number"
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            defaultValue={v.max ?? ""}
-            onBlur={(e) => onChange({ max: e.target.value ? Number(e.target.value) : undefined })}
-          />
-        </Field>
-      </div>
-      <Field label="단위">
-        <input
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          placeholder="예: kg, 個"
-          defaultValue={v.unit ?? ""}
-          onBlur={(e) => onChange({ unit: e.target.value || undefined })}
-        />
-      </Field>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={v.thousandsSeparator ?? false}
-          onChange={(e) => onChange({ thousandsSeparator: e.target.checked })}
-        />
-        천 단위 구분 허용
-      </label>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
-        빈칸 허용
-      </label>
-    </>
-  );
-}
-
-function CheckConfigPanel({
-  value,
-  otherCheckFields,
-  onChange,
-}: {
-  value?: CheckConfig;
-  otherCheckFields: FieldDTO[];
-  onChange: (p: Partial<CheckConfig>) => void;
-}) {
-  const v = value ?? ({} as CheckConfig);
-  return (
-    <>
-      <Field label="판정 방식">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.mode ?? "symbol_classification"}
-          onChange={(e) => onChange({ mode: e.target.value as CheckConfig["mode"] })}
-        >
-          <option value="presence">체크 유무</option>
-          <option value="symbol_classification">true/false 기호</option>
-        </select>
-      </Field>
-      <Field label="true 표시 (쉼표 구분)">
-        <input
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          defaultValue={(v.trueMarks ?? ["CHECK", "V"]).join(", ")}
-          onBlur={(e) => onChange({ trueMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-        />
-      </Field>
-      {v.mode === "symbol_classification" && (
-        <Field label="false 표시 (쉼표 구분)">
-          <input
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            defaultValue={(v.falseMarks ?? ["X"]).join(", ")}
-            onBlur={(e) => onChange({ falseMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-          />
-        </Field>
-      )}
-      <Field label="빈칸 처리">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.blankValue ?? "null"}
-          onChange={(e) => onChange({ blankValue: e.target.value as CheckConfig["blankValue"] })}
-        >
-          <option value="null">null (미기재로 간주)</option>
-          <option value="false">false</option>
-          <option value="required_error">필수 오류</option>
-        </select>
-      </Field>
-      <Field label="애매한 표시">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.ambiguousPolicy ?? "always_review"}
-          onChange={(e) => onChange({ ambiguousPolicy: e.target.value as CheckConfig["ambiguousPolicy"] })}
-        >
-          <option value="always_review">항상 검수</option>
-          <option value="nearest_guess">가장 가까운 값 추천</option>
-        </select>
-      </Field>
-      <Field label="선택 영역">
-        <select
-          className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-          value={v.regionMode ?? "box"}
-          onChange={(e) => onChange({ regionMode: e.target.value as CheckConfig["regionMode"] })}
-        >
-          <option value="box">박스 내부</option>
-          <option value="full_area">영역 전체</option>
-        </select>
-      </Field>
-      {otherCheckFields.length === 0 && (
-        <p className="text-[11px] text-slate-400">체크 필드가 하나 더 있으면 검증 섹션에서 교차 검증을 설정할 수 있습니다.</p>
-      )}
-    </>
-  );
-}
-
-function CreateRepeatGroupModal({
-  fieldCount,
-  onCancel,
-  onCreate,
-}: {
-  fieldCount: number;
-  onCancel: () => void;
-  onCreate: (opts: { label: string; maxRows: number; blankRowPolicy: "exclude" | "include"; useRowNumber: boolean }) => void;
-}) {
-  const [label, setLabel] = useState("반복행");
-  const [maxRows, setMaxRows] = useState(25);
-  const [blankRowPolicy, setBlankRowPolicy] = useState<"exclude" | "include">("exclude");
-  const [useRowNumber, setUseRowNumber] = useState(false);
-
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-white rounded shadow-lg w-96 p-5 space-y-3">
-        <h2 className="font-medium">반복행으로 묶기</h2>
-        <p className="text-xs text-slate-400">선택한 필드 {fieldCount}개를 첫 행으로 하는 반복행 그룹을 만듭니다.</p>
-        <Field label="그룹명">
-          <input className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]" value={label} onChange={(e) => setLabel(e.target.value)} />
-        </Field>
-        <Field label="최대 행 수">
-          <input
-            type="number"
-            min={1}
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            value={maxRows}
-            onChange={(e) => setMaxRows(Number(e.target.value))}
-          />
-        </Field>
-        <Field label="빈 행 처리">
-          <select
-            className="w-full rounded-lg border border-[var(--color-border)] px-2.5 py-1.5 outline-none focus:border-[var(--color-brand-500)] focus:ring-2 focus:ring-[var(--color-brand-100)]"
-            value={blankRowPolicy}
-            onChange={(e) => setBlankRowPolicy(e.target.value as "exclude" | "include")}
-          >
-            <option value="exclude">빈 행 제외</option>
-            <option value="include">빈 행 포함</option>
-          </select>
-        </Field>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={useRowNumber} onChange={(e) => setUseRowNumber(e.target.checked)} />
-          행 번호 사용
-        </label>
-        <div className="flex justify-end gap-2 pt-2">
-          <button className="text-sm border rounded px-3 py-1" onClick={onCancel}>
-            취소
-          </button>
-          <button
-            className="text-sm bg-teal-600 text-white rounded px-3 py-1"
-            onClick={() => onCreate({ label, maxRows, blankRowPolicy, useRowNumber })}
-          >
-            만들기
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-

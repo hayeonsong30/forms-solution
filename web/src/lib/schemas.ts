@@ -145,6 +145,12 @@ export const reopenDocumentSchema = z.object({
   reason: z.string().min(1),
 });
 
+// PRD_양식편집기_상세 §8.0: 1차 데모 최대 20MB
+export const uploadTemplatePdfSchema = z.object({
+  pdfDataUri: z.string().startsWith("data:application/pdf;base64,"),
+  pageCount: z.number().int().min(1),
+});
+
 export const exportRequestSchema = z.object({
   documentIds: z.array(z.string()).min(1),
 });
