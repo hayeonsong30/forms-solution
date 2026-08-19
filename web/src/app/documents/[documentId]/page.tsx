@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 import type { DocumentDetailDTO, DocumentStatus, FieldType } from "@/types";
+import { downloadExport } from "@/lib/downloadExport";
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
   printed: "인쇄됨",
@@ -123,9 +124,35 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
           </button>
         )}
         {doc.status === "confirmed" && (
-          <button className="text-sm border rounded px-3 py-1" onClick={() => setShowReopen(true)}>
-            재검수 열기
-          </button>
+          <>
+            <button className="text-sm border rounded px-3 py-1" onClick={() => setShowReopen(true)}>
+              재검수 열기
+            </button>
+            <button
+              className="text-sm border rounded px-3 py-1 disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={async () => {
+                setBusy("export-csv");
+                const err = await downloadExport("csv", [documentId]);
+                if (err) setActionError(err);
+                setBusy(null);
+              }}
+            >
+              CSV 다운로드
+            </button>
+            <button
+              className="text-sm border rounded px-3 py-1 disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={async () => {
+                setBusy("export-excel");
+                const err = await downloadExport("excel", [documentId]);
+                if (err) setActionError(err);
+                setBusy(null);
+              }}
+            >
+              Excel 다운로드
+            </button>
+          </>
         )}
         {busy === "import" && <span className="text-xs text-gray-500">업로드 중…</span>}
       </div>

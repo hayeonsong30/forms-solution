@@ -144,3 +144,7 @@ export const updateFieldValueSchema = z.object({
 export const reopenDocumentSchema = z.object({
   reason: z.string().min(1),
 });
+
+export const exportRequestSchema = z.object({
+  documentIds: z.array(z.string()).min(1),
+});
