@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>폼솔루션 운영자 포털 — 프로토타입 v0.1</title>
+<style>
+  :root{
+    --bg:#F5F6FA; --panel:#FFFFFF; --border:#E4E7EE;
+    --text:#1B2030; --text-sub:#6B7280; --text-faint:#9CA3AF;
+    --sidebar:#161B2C; --sidebar-sub:#8A90A6; --sidebar-active:#242B45;
+    --primary:#4B5DF2; --primary-dark:#3B4AD6; --primary-soft:#EEF0FE;
+    --accent:#12B886; --accent-soft:#E6FBF3;
+    --warn:#F5A623; --warn-soft:#FEF3E0;
+    --danger:#E5484D; --danger-soft:#FDEAEA;
+    --new:#8B5CF6; --new-soft:#F3EEFE;
+    --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+
+  .app{display:flex;min-height:100vh;}
+  .sidebar{width:236px;flex:none;background:var(--sidebar);color:#fff;display:flex;flex-direction:column;padding:20px 0;}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 20px 16px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);}
+  .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#1F2A44,#4B5DF2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;}
+  .brand-name{font-weight:700;font-size:15px;letter-spacing:-.2px;}
+  .brand-sub{font-size:10.5px;color:var(--sidebar-sub);margin-top:1px;}
+
+  .portal-switch{margin:0 20px 14px;display:flex;background:rgba(255,255,255,.06);border-radius:8px;padding:3px;}
+  .portal-tab{flex:1;text-align:center;font-size:11px;font-weight:700;padding:6px 4px;border-radius:6px;color:var(--sidebar-sub);}
+  .portal-tab.active{background:var(--primary);color:#fff;}
+  .portal-tab.disabled{opacity:.4;}
+
+  .role-switch{margin:0 20px 16px;display:flex;gap:6px;}
+  .role-tab{flex:1;text-align:center;font-size:11px;font-weight:600;padding:6px 4px;border-radius:6px;background:rgba(255,255,255,.05);color:var(--sidebar-sub);cursor:pointer;border:1px solid rgba(255,255,255,.08);}
+  .role-tab.active{background:rgba(75,93,242,.18);border-color:var(--primary);color:#fff;}
+
+  .nav-group{margin-top:14px;padding:0 12px;}
+  .nav-group.role-hidden{display:none;}
+  .nav-label{font-size:10.5px;font-weight:700;color:var(--sidebar-sub);text-transform:uppercase;letter-spacing:.06em;padding:0 10px;margin-bottom:6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--sidebar-sub);font-size:13.5px;font-weight:500;margin-bottom:2px;cursor:pointer;}
+  .nav-item .ic{width:18px;height:18px;flex:none;opacity:.85;}
+  .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .nav-item.active{background:var(--sidebar-active);color:#fff;}
+
+  .sidebar-foot{margin-top:auto;padding:14px 20px 0;border-top:1px solid rgba(255,255,255,.08);}
+  .sidebar-foot-item{font-size:12px;color:var(--sidebar-sub);padding:6px 0;}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{height:56px;flex:none;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;}
+  .crumb{font-size:13px;color:var(--text-sub);}
+  .crumb b{color:var(--text);font-weight:600;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .scope-pill{font-size:11.5px;font-weight:700;background:var(--primary-soft);color:var(--primary);border-radius:20px;padding:5px 12px;}
+  .user{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-sub);}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex:none;}
+
+  .content{padding:24px;overflow-y:auto;}
+  .page{display:none;}
+  .page.active{display:block;animation:fade .15s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+
+  .page-head{margin-bottom:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .page-title{font-size:19px;font-weight:700;letter-spacing:-.3px;}
+  .page-desc{font-size:12.5px;color:var(--text-sub);margin-top:3px;}
+
+  .grid{display:grid;gap:14px;}
+  .grid-2{grid-template-columns:1fr 1fr;}
+  .grid-3{grid-template-columns:repeat(3,1fr);}
+  .grid-4{grid-template-columns:repeat(4,1fr);}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .card-pad{padding:18px;}
+  .section-title{font-size:14.5px;font-weight:700;margin-bottom:2px;}
+  .section-sub{font-size:12px;color:var(--text-sub);margin-bottom:14px;}
+
+  .stat-card{padding:16px 16px 14px;}
+  .stat-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .stat-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .stat-label{font-size:12px;color:var(--text-sub);font-weight:600;}
+  .stat-value{font-size:22px;font-weight:800;letter-spacing:-.5px;}
+  .stat-sub{font-size:11.5px;color:var(--text-faint);margin-top:4px;}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11px;color:var(--text-sub);font-weight:600;}
+  select,.input,textarea{height:34px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;font-size:12.5px;color:var(--text);min-width:120px;font-family:inherit;}
+  textarea{height:64px;padding:8px 10px;resize:vertical;width:100%;}
+  .input{min-width:180px;width:100%;}
+  .btn{height:34px;padding:0 14px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text);display:inline-flex;align-items:center;gap:6px;}
+  .btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-sm{height:28px;padding:0 10px;font-size:11.5px;border-radius:6px;}
+  .btn-danger-outline{color:var(--danger);border-color:#F6C6C7;}
+
+  table{width:100%;border-collapse:collapse;}
+  thead th{text-align:left;font-size:11px;font-weight:700;color:var(--text-sub);text-transform:uppercase;letter-spacing:.03em;padding:10px 14px;border-bottom:1px solid var(--border);background:#FAFBFC;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:middle;white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFAFE;}
+  tbody tr.row-hidden{display:none;}
+  .cell-strong{font-weight:600;}
+  .cell-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+  .badge-dot{width:6px;height:6px;border-radius:50%;}
+  .badge-green{background:var(--accent-soft);color:#0B8F63;}.badge-green .badge-dot{background:#0B8F63;}
+  .badge-amber{background:var(--warn-soft);color:#B4740E;}.badge-amber .badge-dot{background:#B4740E;}
+  .badge-red{background:var(--danger-soft);color:#C22C31;}.badge-red .badge-dot{background:#C22C31;}
+  .badge-gray{background:#F1F2F6;color:#5B6072;}.badge-gray .badge-dot{background:#8A90A6;}
+  .badge-blue{background:var(--primary-soft);color:var(--primary);}.badge-blue .badge-dot{background:var(--primary);}
+  .badge-new{background:var(--new-soft);color:var(--new);}.badge-new .badge-dot{background:var(--new);}
+
+  .req-ref{font-size:10px;color:var(--text-faint);font-weight:600;}
+  .stub-note{font-size:11px;color:var(--text-faint);border-top:1px dashed var(--border);margin-top:10px;padding-top:10px;}
+  .flow-note{font-size:11.5px;color:var(--text-sub);background:var(--primary-soft);border:1px solid #DCE0FB;border-radius:8px;padding:9px 12px;margin-bottom:14px;}
+  .flow-note b{color:var(--primary);}
+
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+  .tab-btn{padding:9px 4px;margin-right:18px;font-size:13px;font-weight:600;color:var(--text-sub);border-bottom:2px solid transparent;cursor:pointer;}
+  .tab-btn.active{color:var(--primary);border-color:var(--primary);}
+
+  .policy-option{border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;display:flex;align-items:flex-start;gap:10px;}
+  .policy-option.selected{border-color:var(--primary);background:var(--primary-soft);}
+  .policy-option input{margin-top:3px;}
+  .policy-title{font-size:12.5px;font-weight:700;}
+  .policy-desc{font-size:11.5px;color:var(--text-sub);margin-top:2px;}
+
+  /* ---------- modal ---------- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,18,32,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:24px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(16,24,40,.25);}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);}
+  .modal-title{font-size:15.5px;font-weight:700;}
+  .modal-close{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-sub);font-size:16px;}
+  .modal-close:hover{background:#F1F2F6;}
+  .modal-body{padding:20px 22px;overflow-y:auto;flex:1;}
+  .modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+  .form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+  .form-row label{font-size:12px;font-weight:700;color:var(--text);}
+  .form-row .hint{font-size:11px;color:var(--text-faint);font-weight:400;}
+  .chip-select{display:flex;flex-wrap:wrap;gap:6px;}
+  .chip{padding:5px 11px;border:1px solid var(--border);border-radius:20px;font-size:11.5px;cursor:pointer;color:var(--text-sub);}
+  .chip.selected{background:var(--primary);border-color:var(--primary);color:#fff;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">FS</div>
+      <div><div class="brand-name">Form Solution</div><div class="brand-sub">운영자 포털</div></div>
+    </div>
+
+    <div class="portal-switch">
+      <div class="portal-tab active">운영자 포털</div>
+      <div class="portal-tab disabled">고객 포털</div>
+    </div>
+
+    <div class="role-switch">
+      <div class="role-tab active" data-role="system">시스템 관리자</div>
+      <div class="role-tab" data-role="partner">파트너 관리자 (제한 뷰)</div>
+    </div>
+
+    <div class="nav-group" data-role="system">
+      <div class="nav-label">전체 관리</div>
+      <div class="nav-item" data-page="partner"><span class="ic">◈</span>파트너 관리</div>
+      <div class="nav-item active" data-page="customer"><span class="ic">◍</span>고객사 관리</div>
+      <div class="nav-item" data-page="license"><span class="ic">▥</span>라이선스 · NCode</div>
+      <div class="nav-item" data-page="ops"><span class="ic">⚙</span>시스템 운영 · 장애</div>
+    </div>
+
+    <div class="nav-group role-hidden" data-role="partner">
+      <div class="nav-label">담당 고객사</div>
+      <div class="nav-item active" data-page="p-customer"><span class="ic">◍</span>담당 고객사 현황</div>
+      <div class="nav-item" data-page="p-account"><span class="ic">◈</span>계정 개설</div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="sidebar-foot-item" id="foot-role">네오랩 시스템 관리자</div>
+      <div class="sidebar-foot-item" style="color:#5B6072;">v0.1 · 운영자포털 프로토타입</div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb" id="crumb">고객사 관리</div>
+      <div class="topbar-right">
+        <div class="scope-pill" id="scope-pill">전체 테넌트 (7개 고객사)</div>
+        <div class="user"><div class="avatar" id="user-avatar">김</div><span id="user-name">김지민</span></div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============================================= -->
+      <!-- 파트너 관리 -->
+      <!-- ============================================= -->
+      <section class="page" id="page-partner">
+        <div class="page-head">
+          <div><div class="page-title">파트너 관리</div><div class="page-desc">채널 파트너 등록 및 담당 고객사 배정 · <span class="req-ref">FR-SYS-004</span></div></div>
+          <button class="btn btn-primary" onclick="openModal('modal-partner')">+ 파트너 등록</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>파트너명</th><th>담당자</th><th>담당 고객사</th><th>사업 구조</th><th>상태</th><th>등록일</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">이츠와 상사</td><td>田中 太郎</td><td>야마토 · 군제 · 아사히</td><td>고객 발굴·중개</td><td><span class="badge badge-green"><span class="badge-dot"></span>Active</span></td><td>2026-05-26</td><td><button class="btn btn-sm">수정</button></td></tr>
+              <tr><td class="cell-strong">고토부키 (寿)</td><td>佐藤 花子</td><td>고토부키 · CIA Fru&amp;Ver</td><td>인쇄 파트너 겸 재판매</td><td><span class="badge badge-amber"><span class="badge-dot"></span>승인 대기</span></td><td>2026-07-22</td><td><button class="btn btn-sm">수정</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="stub-note">파트너 관리자는 "담당 고객사 계정 개설·현황 조회" 권한만 가지며, NCode 발급·시스템 운영 메뉴는 접근할 수 없습니다. 왼쪽 역할 스위치에서 "파트너 관리자 (제한 뷰)"로 확인해보세요.</div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 고객사 관리 -->
+      <!-- ============================================= -->
+      <section class="page active" id="page-customer">
+        <div class="page-head">
+          <div><div class="page-title">고객사 관리</div><div class="page-desc">해외사업부 7개 안건사 · <span class="req-ref">FR-SYS-001, NFR-003</span></div></div>
+          <button class="btn btn-primary" onclick="openModal('modal-customer')">+ 고객사 등록</button>
+        </div>
+
+        <div class="card">
+          <table>
+            <thead><tr><th>고객사</th><th>담당 파트너</th><th>언어</th><th>사용자 수</th><th>등록 양식</th><th>계약 상태</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">이츠와 상사</td><td>—</td><td>日本語</td><td>4</td><td>—</td><td><span class="badge badge-blue"><span class="badge-dot"></span>인입원</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">GUNZE 군제</td><td>이츠와 상사</td><td>日本語</td><td>6</td><td>38</td><td><span class="badge badge-green"><span class="badge-dot"></span>운영중</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">야마토 기프트</td><td>이츠와 상사</td><td>日本語</td><td>3</td><td>12</td><td><span class="badge badge-green"><span class="badge-dot"></span>운영중</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">아사히카세이</td><td>이츠와 상사</td><td>日本語</td><td>2</td><td>5</td><td><span class="badge badge-amber"><span class="badge-dot"></span>데모 대응</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">닛산 자동차</td><td>—</td><td>日本語</td><td>2</td><td>3</td><td><span class="badge badge-amber"><span class="badge-dot"></span>데모 중</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">고토부키 (寿)</td><td>고토부키</td><td>日本語</td><td>1</td><td>9</td><td><span class="badge badge-blue"><span class="badge-dot"></span>NDA 완료</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+              <tr><td class="cell-strong">CIA Fru&amp;Ver</td><td>고토부키</td><td>Español</td><td>1</td><td>9</td><td><span class="badge badge-blue"><span class="badge-dot"></span>NDA 완료</span></td><td><button class="btn btn-sm">상세</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 라이선스 · NCode -->
+      <!-- ============================================= -->
+      <section class="page" id="page-license">
+        <div class="page-head">
+          <div><div class="page-title">라이선스 · NCode 관리</div><div class="page-desc">좌석 현황 · NCode 발급 · 다매 인쇄 정책 · <span class="req-ref">FR-SYS-003, FR-PRT-008/009</span></div></div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab-btn active">좌석 라이선스</div>
+          <div class="tab-btn">NCode 발급</div>
+          <div class="tab-btn">다매 인쇄 정책</div>
+        </div>
+
+        <div class="grid grid-4" style="margin-bottom:14px;">
+          <div class="card stat-card"><div class="stat-label">전체 좌석</div><div class="stat-value">120</div></div>
+          <div class="card stat-card"><div class="stat-label">사용 중</div><div class="stat-value">94</div></div>
+          <div class="card stat-card"><div class="stat-label">잔여</div><div class="stat-value" style="color:var(--accent);">26</div></div>
+          <div class="card stat-card"><div class="stat-label">이번달 신규 발급 NCode</div><div class="stat-value">18</div></div>
+        </div>
+
+        <div class="card">
+          <table>
+            <thead><tr><th>고객사</th><th>배정 좌석</th><th>사용 중</th><th>NCode 발급 대역</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">GUNZE 군제</td><td>40</td><td>32</td><td>0x3A00–0x3AFF</td></tr>
+              <tr><td class="cell-strong">이츠와 상사</td><td>20</td><td>14</td><td>0x1200–0x12FF</td></tr>
+              <tr><td class="cell-strong">고토부키 (寿)</td><td>30</td><td>28</td><td>0x5000–0x50FF</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card card-pad" style="margin-top:16px;">
+          <div class="flow-note"><b>미결정 #1</b> 동일 NCode 다매 식별 방식 — 고토부키 9~10월 영업 개시 전 결론 필요.</div>
+          <div class="section-title">다매 인쇄 정책 선택</div>
+          <div class="section-sub">고객사별로 적용할 방식을 지정합니다</div>
+          <div class="policy-option selected"><input type="radio" name="policy" checked><div><div class="policy-title">① NCode를 매수마다 분리 발급</div><div class="policy-desc">가장 안전하지만 인쇄 코스트 절감 효과 없음</div></div></div>
+          <div class="policy-option"><input type="radio" name="policy"><div><div class="policy-title">② 문서 일련번호 가변 인쇄</div><div class="policy-desc">DigiDox 방식 — 매 인쇄가 개별 관리되어 "동일판 대량 인쇄" 목적과 상충</div></div></div>
+          <div class="policy-option"><input type="radio" name="policy"><div><div class="policy-title">③ 연번 스탬프 인쇄 후 별도 식별</div><div class="policy-desc">현장에서 번호란 수기 작성 — 고토부키와 협의 중</div></div></div>
+          <div class="policy-option"><input type="radio" name="policy"><div><div class="policy-title">④ 앱·웹에서 페이지 지정</div><div class="policy-desc">문자 변환 처리가 필요해 별도 검토 필요</div></div></div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 시스템 운영 · 장애 -->
+      <!-- ============================================= -->
+      <section class="page" id="page-ops">
+        <div class="page-head">
+          <div><div class="page-title">시스템 운영 · 장애 관리</div><div class="page-desc">전체 업로드 로그 · 헬프데스크 · 서비스 상태 · <span class="req-ref">FR-SYS-005/006, NFR-008/010</span></div></div>
+        </div>
+
+        <div class="grid grid-4" style="margin-bottom:14px;">
+          <div class="card stat-card"><div class="stat-label">가동률 (30일)</div><div class="stat-value" style="color:var(--accent);">99.94%</div></div>
+          <div class="card stat-card"><div class="stat-label">평균 처리 시간</div><div class="stat-value">2.1초</div></div>
+          <div class="card stat-card"><div class="stat-label">업로드 실패율</div><div class="stat-value">0.3%</div></div>
+          <div class="card stat-card"><div class="stat-label">미처리 문의</div><div class="stat-value" style="color:var(--warn);">3</div></div>
+        </div>
+
+        <div class="card">
+          <table>
+            <thead><tr><th>Seq</th><th>Device ID</th><th>Form ID</th><th>고객사</th><th>IP</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              <tr><td>13047</td><td>9C:7B:D2:57:20:1B</td><td class="cell-strong">ITSUWA-1</td><td>이츠와 상사</td><td>160.86.239.196</td><td><span class="badge badge-green"><span class="badge-dot"></span>Success</span></td><td>08-03 16:21</td></tr>
+              <tr><td>13048</td><td>9C:7B:D2:57:1F:D3</td><td class="cell-strong">GUNZE-1</td><td>GUNZE 군제</td><td>106.254.224.66</td><td><span class="badge badge-green"><span class="badge-dot"></span>Success</span></td><td>07-30 18:35</td></tr>
+              <tr><td>13049</td><td>9C:7B:D2:57:2A:44</td><td class="cell-strong">KOTOBUKI-1</td><td>고토부키</td><td>219.101.5.12</td><td><span class="badge badge-red"><span class="badge-dot"></span>Fail</span></td><td>07-23 14:00</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 파트너 제한 뷰 -->
+      <!-- ============================================= -->
+      <section class="page" id="page-p-customer">
+        <div class="page-head">
+          <div><div class="page-title">담당 고객사 현황</div><div class="page-desc">이츠와 상사가 발굴·중개하는 고객사만 표시 · <span class="req-ref">FR-SYS-004</span></div></div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>고객사</th><th>언어</th><th>사용자 수</th><th>등록 양식</th><th>계약 상태</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">GUNZE 군제</td><td>日本語</td><td>6</td><td>38</td><td><span class="badge badge-green"><span class="badge-dot"></span>운영중</span></td></tr>
+              <tr><td class="cell-strong">야마토 기프트</td><td>日本語</td><td>3</td><td>12</td><td><span class="badge badge-green"><span class="badge-dot"></span>운영중</span></td></tr>
+              <tr><td class="cell-strong">아사히카세이</td><td>日本語</td><td>2</td><td>5</td><td><span class="badge badge-amber"><span class="badge-dot"></span>데모 대응</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="stub-note">라이선스 발급, NCode 대역 관리, 시스템 로그는 파트너 관리자 화면에 노출되지 않습니다 — 필요 시 시스템 관리자에게 요청.</div>
+      </section>
+
+      <section class="page" id="page-p-account">
+        <div class="page-head">
+          <div><div class="page-title">계정 개설</div><div class="page-desc">담당 고객사의 그룹 관리자 계정을 개설 · <span class="req-ref">FR-SYS-004</span></div></div>
+        </div>
+        <div class="card card-pad">
+          <div class="filters" style="flex-direction:column;align-items:stretch;max-width:360px;gap:12px;">
+            <div class="field"><label>고객사</label><select class="input"><option>GUNZE 군제</option><option>야마토 기프트</option><option>아사히카세이</option></select></div>
+            <div class="field"><label>이메일</label><input class="input" placeholder="user@company.co.jp"></div>
+            <div class="field"><label>이름</label><input class="input" placeholder="담당자명"></div>
+            <div class="field"><label>권한 레벨</label><select class="input"><option>그룹 관리자</option><option>일반 사용자</option></select></div>
+            <button class="btn btn-primary">계정 개설 요청</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: 파트너 등록 ===================== -->
+<div class="modal-overlay" id="modal-partner">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">파트너 등록</div><div class="modal-close" onclick="closeModal('modal-partner')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-row"><label>파트너명</label><input class="input" placeholder="예: 이츠와 상사"></div>
+      <div class="form-row"><label>담당자</label><input class="input" placeholder="담당자명"></div>
+      <div class="form-row"><label>담당자 이메일</label><input class="input" placeholder="tanaka@itsuwa.co.jp"></div>
+      <div class="form-row"><label>담당 고객사</label>
+        <div class="chip-select">
+          <div class="chip selected">야마토 기프트</div><div class="chip selected">GUNZE 군제</div><div class="chip selected">아사히카세이</div>
+          <div class="chip">이츠와 상사</div><div class="chip">닛산 자동차</div><div class="chip">고토부키</div><div class="chip">CIA Fru&amp;Ver</div>
+        </div>
+      </div>
+      <div class="form-row"><label>사업 구조 메모</label><textarea placeholder="예: 관서권 고객 발굴·중개"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('modal-partner')">취소</button><button class="btn btn-primary" onclick="closeModal('modal-partner')">등록</button></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: 고객사 등록 ===================== -->
+<div class="modal-overlay" id="modal-customer">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">고객사 등록</div><div class="modal-close" onclick="closeModal('modal-customer')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-row"><label>고객사명</label><input class="input" placeholder="예: GUNZE 군제"></div>
+      <div class="form-row"><label>담당 파트너</label><select class="input"><option>없음 (직접 관리)</option><option>이츠와 상사</option><option>고토부키</option></select></div>
+      <div class="form-row"><label>기본 언어</label><select class="input"><option>日本語</option><option>한국어</option><option>English</option><option>Español</option></select></div>
+      <div class="form-row"><label>시간대</label><select class="input"><option>Asia/Tokyo</option><option>Asia/Seoul</option><option>Europe/Madrid</option></select></div>
+      <div class="form-row"><label>초기 좌석 수</label><input class="input" value="10"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" onclick="closeModal('modal-customer')">취소</button><button class="btn btn-primary" onclick="closeModal('modal-customer')">등록</button></div>
+  </div>
+</div>
+
+<script>
+  function selectPage(pageKey){
+    document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.classList.toggle('active', n.dataset.page===pageKey));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    const target = document.getElementById('page-'+pageKey);
+    if(target) target.classList.add('active');
+    const activeNav = document.querySelector('.nav-item[data-page="'+pageKey+'"]');
+    document.getElementById('crumb').textContent = activeNav ? activeNav.textContent.trim() : pageKey;
+  }
+  document.querySelectorAll('.nav-item[data-page]').forEach(item=>{
+    item.addEventListener('click', ()=>selectPage(item.dataset.page));
+  });
+
+  document.querySelectorAll('.tabs').forEach(tabGroup=>{
+    const btns = tabGroup.querySelectorAll('.tab-btn');
+    btns.forEach(b=>b.addEventListener('click', ()=>{ btns.forEach(x=>x.classList.remove('active')); b.classList.add('active'); }));
+  });
+
+  document.querySelectorAll('.policy-option').forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      opt.parentElement.querySelectorAll('.policy-option').forEach(o=>o.classList.remove('selected'));
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+    });
+  });
+  document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click', ()=>c.classList.toggle('selected')));
+
+  function openModal(id){ document.getElementById(id).classList.add('open'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(ov=>{
+    ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
+  });
+
+  const ROLE_PAGES = { system:'customer', partner:'p-customer' };
+  const ROLE_SCOPE = {
+    system:{ scope:'전체 테넌트 (7개 고객사)', name:'김지민', avatar:'김', foot:'네오랩 시스템 관리자' },
+    partner:{ scope:'담당 고객사 3곳 (이츠와 상사)', name:'田中 太郎', avatar:'田', foot:'파트너 관리자 · 이츠와 상사' },
+  };
+  document.querySelectorAll('.role-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.role-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.nav-group[data-role]').forEach(g=>{
+        g.classList.toggle('role-hidden', g.dataset.role !== tab.dataset.role);
+      });
+      const cfg = ROLE_SCOPE[tab.dataset.role];
+      document.getElementById('scope-pill').textContent = cfg.scope;
+      document.getElementById('user-name').textContent = cfg.name;
+      document.getElementById('user-avatar').textContent = cfg.avatar;
+      document.getElementById('foot-role').textContent = cfg.foot;
+      selectPage(ROLE_PAGES[tab.dataset.role]);
+    });
+  });
+</script>
+</body>
+</html>

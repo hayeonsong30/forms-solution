@@ -1,0 +1,326 @@
+// Prisma schema for 폼솔루션 (Form Solution)
+// See /Users/neolab/Desktop/forms solution/PRD_폼솔루션_v0.1.md and PRD_양식편집기_상세_v0.1.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  editor
+  field_user
+  reviewer
+}
+
+enum TemplateStatus {
+  draft
+  active
+  retired
+}
+
+enum FieldType {
+  text
+  number
+  check
+}
+
+enum FieldSource {
+  manual
+  ai
+  copied
+}
+
+enum FieldStatus {
+  suggested
+  confirmed
+}
+
+enum DocumentStatus {
+  printed
+  received
+  processing
+  review_required
+  confirmed
+  error
+}
+
+enum ValueSource {
+  ai
+  user
+  stroke_rule
+  empty_rule
+}
+
+enum ReviewStatus {
+  pending
+  needs_review
+  confirmed
+}
+
+enum AiTargetType {
+  template
+  document
+}
+
+enum AiJobType {
+  form_detection
+  handwriting_ocr
+}
+
+enum AiJobStatus {
+  queued
+  preprocessing
+  processing
+  validating
+  review_required
+  completed
+  retrying
+  failed
+}
+
+enum ExportType {
+  csv_single
+  csv_batch
+  excel_doc
+  excel_list
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  contact   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  users     User[]
+  templates Template[]
+  documents Document[]
+
+  @@map("organizations")
+}
+
+model User {
+  id    String   @id @default(uuid())
+  orgId String   @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+  role  UserRole
+  email String   @unique
+  name  String
+
+  confirmedDocuments Document[] @relation("DocumentConfirmedBy")
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model Template {
+  id               String         @id @default(uuid())
+  orgId            String         @map("org_id")
+  org              Organization   @relation(fields: [orgId], references: [id])
+  name             String
+  status           TemplateStatus @default(draft)
+  printable        Boolean        @default(false)
+  printableReason  String?        @map("printable_reason")
+  currentVersionId String?        @map("current_version_id")
+
+  versions TemplateVersion[] @relation("TemplateVersions")
+
+  @@map("templates")
+}
+
+model TemplateVersion {
+  id         String   @id @default(uuid())
+  templateId String   @map("template_id")
+  template   Template @relation("TemplateVersions", fields: [templateId], references: [id])
+  versionNo  Int      @map("version_no")
+  pageCount  Int      @map("page_count")
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  fields       Field[]
+  repeatGroups RepeatGroup[]
+  documents    Document[]
+
+  @@unique([templateId, versionNo])
+  @@map("template_versions")
+}
+
+model Field {
+  id                String      @id @default(uuid())
+  templateVersionId String      @map("template_version_id")
+  templateVersion   TemplateVersion @relation(fields: [templateVersionId], references: [id])
+  pageNo            Int         @map("page_no")
+  label             String
+  dataKey           String      @map("data_key")
+  type              FieldType
+  // normalized 0~1 coordinates, page-relative (PRD 편집기 §8.4)
+  boxX              Float       @map("box_x")
+  boxY              Float       @map("box_y")
+  boxW              Float       @map("box_w")
+  boxH              Float       @map("box_h")
+  required          Boolean     @default(false)
+  locked            Boolean     @default(false)
+  hidden            Boolean     @default(false)
+  source            FieldSource @default(manual)
+  status            FieldStatus @default(confirmed)
+  config            Json        @default("{}")
+
+  checkOptions CheckOption[]
+  fieldValues  FieldValue[]
+
+  @@unique([templateVersionId, dataKey])
+  @@map("fields")
+}
+
+model CheckOption {
+  id        String @id @default(uuid())
+  fieldId   String @map("field_id")
+  field     Field  @relation(fields: [fieldId], references: [id])
+  label     String
+  regionX   Float  @map("region_x")
+  regionY   Float  @map("region_y")
+  regionW   Float  @map("region_w")
+  regionH   Float  @map("region_h")
+
+  @@map("check_options")
+}
+
+model RepeatGroup {
+  id                String   @id @default(uuid())
+  templateVersionId String   @map("template_version_id")
+  templateVersion   TemplateVersion @relation(fields: [templateVersionId], references: [id])
+  label             String
+  dataKey           String   @map("data_key")
+  pageNo            Int      @map("page_no")
+  areaX             Float    @map("area_x")
+  areaY             Float    @map("area_y")
+  areaW             Float    @map("area_w")
+  areaH             Float    @map("area_h")
+  firstRowArea      Json     @map("first_row_area")
+  headerExcludeArea Json?    @map("header_exclude_area")
+  rowHeight         Float    @map("row_height")
+  maxRows           Int      @map("max_rows")
+  blankRowPolicy    String   @map("blank_row_policy")
+  useRowNumber      Boolean  @default(false) @map("use_row_number")
+  allowDuplicate    Boolean  @default(false) @map("allow_duplicate")
+
+  columns     RepeatColumn[]
+  fieldValues FieldValue[]
+
+  @@unique([templateVersionId, dataKey])
+  @@map("repeat_groups")
+}
+
+model RepeatColumn {
+  id            String      @id @default(uuid())
+  repeatGroupId String      @map("repeat_group_id")
+  repeatGroup   RepeatGroup @relation(fields: [repeatGroupId], references: [id])
+  orderNo       Int         @map("order_no")
+  dataKey       String      @map("data_key")
+  type          FieldType
+  config        Json        @default("{}")
+
+  fieldValues FieldValue[]
+
+  @@unique([repeatGroupId, dataKey])
+  @@map("repeat_columns")
+}
+
+model Document {
+  id                String         @id @default(uuid())
+  templateVersionId String         @map("template_version_id")
+  templateVersion   TemplateVersion @relation(fields: [templateVersionId], references: [id])
+  orgId             String         @map("org_id")
+  org               Organization   @relation(fields: [orgId], references: [id])
+  ncode             String?
+  status            DocumentStatus @default(printed)
+  pageImages        Json           @default("[]") @map("page_images")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  confirmedAt       DateTime?      @map("confirmed_at")
+  confirmedById     String?        @map("confirmed_by")
+  confirmedBy       User?          @relation("DocumentConfirmedBy", fields: [confirmedById], references: [id])
+
+  fieldValues FieldValue[]
+  aiJobs      AiJob[]
+  exports     Export[]
+
+  @@map("documents")
+}
+
+model FieldValue {
+  id               String       @id @default(uuid())
+  documentId       String       @map("document_id")
+  document         Document     @relation(fields: [documentId], references: [id])
+  fieldId          String?      @map("field_id")
+  field            Field?       @relation(fields: [fieldId], references: [id])
+  repeatGroupId    String?      @map("repeat_group_id")
+  repeatGroup      RepeatGroup? @relation(fields: [repeatGroupId], references: [id])
+  repeatColumnId   String?      @map("repeat_column_id")
+  repeatColumn     RepeatColumn? @relation(fields: [repeatColumnId], references: [id])
+  rowIndex         Int?         @map("row_index")
+
+  rawOcrValue     String?      @map("raw_ocr_value")
+  normalizedValue String?      @map("normalized_value")
+  finalValue      String?      @map("final_value")
+  valueSource     ValueSource? @map("value_source")
+  reviewStatus    ReviewStatus @default(pending) @map("review_status")
+  reviewReasons   Json         @default("[]") @map("review_reasons")
+  model           String?
+  promptVersion   String?      @map("prompt_version")
+  confidence      Float?
+
+  // either fieldId (일반 필드) or (repeatGroupId + repeatColumnId + rowIndex) must be set
+  @@map("field_values")
+}
+
+model AiJob {
+  id             String       @id @default(uuid())
+  targetType     AiTargetType @map("target_type")
+  targetId       String       @map("target_id")
+  documentId     String?      @map("document_id")
+  document       Document?    @relation(fields: [documentId], references: [id])
+  jobType        AiJobType    @map("job_type")
+  status         AiJobStatus  @default(queued)
+  provider       String
+  model          String
+  promptVersion  String       @map("prompt_version")
+  requestPayload Json?        @map("request_payload")
+  responsePayload Json?       @map("response_payload")
+  errorMessage   String?      @map("error_message")
+  retryCount     Int          @default(0) @map("retry_count")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@map("ai_jobs")
+}
+
+model Export {
+  id         String     @id @default(uuid())
+  documentId String?    @map("document_id")
+  document   Document?  @relation(fields: [documentId], references: [id])
+  batch      Json?
+  exportType ExportType @map("export_type")
+  fileUrl    String?    @map("file_url")
+  createdBy  String?    @map("created_by")
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@map("exports")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("audit_log")
+}

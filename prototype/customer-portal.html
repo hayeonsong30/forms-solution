@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>폼솔루션 고객 포털 — 프로토타입 v0.1 (양식 관리 상세)</title>
+<style>
+  :root{
+    --bg:#F5F6FA; --panel:#FFFFFF; --border:#E4E7EE;
+    --text:#1B2030; --text-sub:#6B7280; --text-faint:#9CA3AF;
+    --sidebar:#161B2C; --sidebar-sub:#8A90A6; --sidebar-active:#242B45;
+    --primary:#4B5DF2; --primary-dark:#3B4AD6; --primary-soft:#EEF0FE;
+    --accent:#12B886; --accent-soft:#E6FBF3;
+    --warn:#F5A623; --warn-soft:#FEF3E0;
+    --danger:#E5484D; --danger-soft:#FDEAEA;
+    --new:#8B5CF6; --new-soft:#F3EEFE;
+    --radius:10px; --shadow:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Apple SD Gothic Neo','Malgun Gothic','Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+
+  .app{display:flex;min-height:100vh;}
+  .sidebar{width:236px;flex:none;background:var(--sidebar);color:#fff;display:flex;flex-direction:column;padding:20px 0;}
+  .brand{display:flex;align-items:center;gap:10px;padding:0 20px 16px;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,.08);}
+  .brand-mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#8B5CF6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;}
+  .brand-name{font-weight:700;font-size:15px;letter-spacing:-.2px;}
+  .brand-sub{font-size:10.5px;color:var(--sidebar-sub);margin-top:1px;}
+
+  .portal-switch{margin:0 20px 14px;display:flex;background:rgba(255,255,255,.06);border-radius:8px;padding:3px;}
+  .portal-tab{flex:1;text-align:center;font-size:11px;font-weight:700;padding:6px 4px;border-radius:6px;color:var(--sidebar-sub);}
+  .portal-tab.active{background:var(--primary);color:#fff;}
+  .portal-tab.disabled{opacity:.4;}
+
+  .role-switch{margin:0 20px 16px;display:flex;gap:6px;}
+  .role-tab{flex:1;text-align:center;font-size:11px;font-weight:600;padding:6px 4px;border-radius:6px;background:rgba(255,255,255,.05);color:var(--sidebar-sub);cursor:pointer;border:1px solid rgba(255,255,255,.08);}
+  .role-tab.active{background:rgba(75,93,242,.18);border-color:var(--primary);color:#fff;}
+
+  .nav-group{margin-top:10px;padding:0 12px;}
+  .nav-group.role-hidden{display:none;}
+  .nav-label{font-size:10.5px;font-weight:700;color:var(--sidebar-sub);text-transform:uppercase;letter-spacing:.06em;padding:0 10px;margin-bottom:6px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--sidebar-sub);font-size:13.5px;font-weight:500;margin-bottom:2px;cursor:pointer;}
+  .nav-item .ic{width:18px;height:18px;flex:none;opacity:.85;}
+  .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .nav-item.active{background:var(--sidebar-active);color:#fff;}
+
+  .sidebar-foot{margin-top:auto;padding:14px 20px 0;border-top:1px solid rgba(255,255,255,.08);}
+  .sidebar-foot-item{font-size:12px;color:var(--sidebar-sub);padding:6px 0;}
+
+  .main{flex:1;min-width:0;display:flex;flex-direction:column;}
+  .topbar{height:56px;flex:none;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 24px;}
+  .crumb{font-size:13px;color:var(--text-sub);}
+  .crumb b{color:var(--text);font-weight:600;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .company-pill{font-size:11.5px;font-weight:700;background:var(--primary-soft);color:var(--primary);border-radius:20px;padding:5px 12px;}
+  .user{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-sub);}
+  .avatar{width:26px;height:26px;border-radius:50%;background:var(--primary-soft);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex:none;}
+
+  .content{padding:24px;overflow-y:auto;}
+  .page{display:none;}
+  .page.active{display:block;animation:fade .15s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(2px);}to{opacity:1;transform:none;}}
+
+  .page-head{margin-bottom:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+  .page-title{font-size:19px;font-weight:700;letter-spacing:-.3px;}
+  .page-desc{font-size:12.5px;color:var(--text-sub);margin-top:3px;}
+  .back-link{font-size:12px;color:var(--primary);font-weight:600;cursor:pointer;margin-bottom:10px;display:inline-flex;align-items:center;gap:4px;}
+
+  .grid{display:grid;gap:14px;}
+  .grid-2{grid-template-columns:1fr 1fr;}
+  .grid-3{grid-template-columns:repeat(3,1fr);}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);}
+  .card-pad{padding:18px;}
+  .section-title{font-size:14.5px;font-weight:700;margin-bottom:2px;}
+  .section-sub{font-size:12px;color:var(--text-sub);margin-bottom:14px;}
+
+  .toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11px;color:var(--text-sub);font-weight:600;}
+  select,.input,textarea{height:34px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:0 10px;font-size:12.5px;color:var(--text);min-width:120px;font-family:inherit;}
+  textarea{height:64px;padding:8px 10px;resize:vertical;width:100%;}
+  .input{min-width:180px;width:100%;}
+  .btn{height:34px;padding:0 14px;border-radius:8px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--text);display:inline-flex;align-items:center;gap:6px;}
+  .btn-primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-sm{height:28px;padding:0 10px;font-size:11.5px;border-radius:6px;}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--text-sub);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+
+  table{width:100%;border-collapse:collapse;}
+  thead th{text-align:left;font-size:11px;font-weight:700;color:var(--text-sub);text-transform:uppercase;letter-spacing:.03em;padding:10px 14px;border-bottom:1px solid var(--border);background:#FAFBFC;white-space:nowrap;}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:middle;white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFAFE;}
+  .cell-strong{font-weight:600;}
+  .cell-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .clickable{cursor:pointer;}
+  .clickable:hover{color:var(--primary);}
+
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+  .badge-dot{width:6px;height:6px;border-radius:50%;}
+  .badge-green{background:var(--accent-soft);color:#0B8F63;}.badge-green .badge-dot{background:#0B8F63;}
+  .badge-amber{background:var(--warn-soft);color:#B4740E;}.badge-amber .badge-dot{background:#B4740E;}
+  .badge-gray{background:#F1F2F6;color:#5B6072;}.badge-gray .badge-dot{background:#8A90A6;}
+  .badge-blue{background:var(--primary-soft);color:var(--primary);}.badge-blue .badge-dot{background:var(--primary);}
+  .badge-new{background:var(--new-soft);color:var(--new);}.badge-new .badge-dot{background:var(--new);}
+
+  .req-ref{font-size:10px;color:var(--text-faint);font-weight:600;}
+  .stub-note{font-size:11px;color:var(--text-faint);border-top:1px dashed var(--border);margin-top:10px;padding-top:10px;}
+
+  .hub-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:18px;}
+  .hub-tab{padding:9px 4px;margin-right:22px;font-size:13.5px;font-weight:700;color:var(--text-sub);border-bottom:2px solid transparent;cursor:pointer;}
+  .hub-tab.active{color:var(--primary);border-color:var(--primary);}
+  .hub-panel{display:none;}
+  .hub-panel.active{display:block;}
+
+  /* ---------- modal ---------- */
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,18,32,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:24px;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(16,24,40,.25);}
+  .modal.wide{max-width:920px;}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);}
+  .modal-title{font-size:15.5px;font-weight:700;}
+  .modal-close{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-sub);font-size:16px;}
+  .modal-close:hover{background:#F1F2F6;}
+  .modal-body{padding:20px 22px;overflow-y:auto;flex:1;}
+  .modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+  .form-row{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+  .form-row label{font-size:12px;font-weight:700;color:var(--text);}
+  .form-row .hint{font-size:11px;color:var(--text-faint);font-weight:400;}
+
+  .dropzone{border:1.5px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--text-sub);font-size:12.5px;background:#FAFBFC;}
+  .dropzone b{color:var(--primary);}
+  .dropzone .sub{color:var(--text-faint);font-size:11px;margin-top:4px;}
+
+  /* ---------- field editor ---------- */
+  .editor-shell{display:flex;gap:16px;height:640px;}
+  .editor-canvas-wrap{flex:1;background:#EDEEF3;border-radius:10px;overflow:auto;padding:24px;display:flex;justify-content:center;}
+  .editor-toolbar{position:sticky;top:0;display:flex;gap:8px;margin-bottom:12px;}
+  .doc-canvas{position:relative;width:520px;background:#fff;box-shadow:0 1px 6px rgba(16,24,40,.12);border-radius:2px;padding:40px 36px;flex:none;height:fit-content;}
+  .doc-canvas h3{font-size:20px;text-align:center;letter-spacing:.3em;margin:0 0 26px;}
+  .doc-line{border-bottom:1px solid #333;height:20px;margin-bottom:14px;width:70%;}
+  .doc-table{width:100%;border-collapse:collapse;margin-top:10px;font-size:10px;}
+  .doc-table th,.doc-table td{border:1px solid #999;padding:6px;text-align:left;}
+  .field-box{position:absolute;border:1.5px solid var(--primary);background:rgba(75,93,242,.08);border-radius:3px;font-size:9px;color:var(--primary);font-weight:700;padding:1px 3px;}
+  .field-box.repeat{border-color:var(--new);background:rgba(139,92,246,.08);color:var(--new);}
+  .field-box.sys{border-color:var(--warn);background:rgba(245,166,35,.08);color:#B4740E;}
+
+  .editor-side{width:300px;flex:none;background:#fff;border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;}
+  .side-tabs{display:flex;border-bottom:1px solid var(--border);}
+  .side-tab{flex:1;text-align:center;padding:11px 4px;font-size:12px;font-weight:700;color:var(--text-sub);cursor:pointer;border-bottom:2px solid transparent;}
+  .side-tab.active{color:var(--primary);border-color:var(--primary);}
+  .side-panel{display:none;padding:16px;overflow-y:auto;flex:1;}
+  .side-panel.active{display:block;}
+  .kv-field{margin-bottom:12px;}
+  .kv-field label{display:block;font-size:11px;font-weight:700;color:var(--text-sub);margin-bottom:4px;}
+
+  .repeat-hero{background:var(--new-soft);border:1px solid #E4D6FC;border-radius:10px;padding:14px;margin-bottom:14px;}
+  .repeat-hero-title{font-size:12.5px;font-weight:800;color:var(--new);display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+  .repeat-hero-desc{font-size:11.5px;color:#5B4B8A;line-height:1.5;}
+
+  .sys-check-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;}
+  .sys-check-row:last-child{border-bottom:none;}
+
+  .field-id-chip{display:inline-block;background:#F1F2F6;border-radius:5px;padding:2px 7px;font-size:10.5px;font-family:ui-monospace,monospace;color:#5B6072;margin:2px 4px 2px 0;cursor:pointer;}
+  .field-id-chip:hover{background:var(--primary-soft);color:var(--primary);}
+
+  .bulk-table{margin-top:14px;}
+  .bulk-table td:first-child{color:var(--text-faint);}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">FS</div>
+      <div><div class="brand-name">Form Solution</div><div class="brand-sub">고객 포털</div></div>
+    </div>
+
+    <div class="portal-switch">
+      <div class="portal-tab disabled">운영자 포털</div>
+      <div class="portal-tab active">고객 포털</div>
+    </div>
+
+    <div class="role-switch">
+      <div class="role-tab active" data-role="admin">고객사 관리자</div>
+      <div class="role-tab" data-role="field">현장 사용자</div>
+    </div>
+
+    <div class="nav-group" data-role="admin">
+      <div class="nav-item" data-page="org"><span class="ic">◍</span>조직·사용자·권한 관리</div>
+      <div class="nav-item active" data-page="form-hub"><span class="ic">▥</span>양식·펜·리포트 관리</div>
+      <div class="nav-item" data-page="data"><span class="ic">◧</span>자사 전체 데이터 조회</div>
+    </div>
+
+    <div class="nav-group role-hidden" data-role="field">
+      <div class="nav-item active" data-page="f-print"><span class="ic">⎙</span>문서 인쇄</div>
+      <div class="nav-item" data-page="f-upload"><span class="ic">↥</span>필기 업로드</div>
+      <div class="nav-item" data-page="f-result"><span class="ic">▤</span>추출 결과 확인</div>
+      <div class="nav-item" data-page="f-report"><span class="ic">⬇</span>리포트 다운로드</div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="sidebar-foot-item" id="foot-role">고객사 관리자 로그인</div>
+      <div class="sidebar-foot-item" style="color:#5B6072;">v0.1 · 고객포털 상세 프로토타입</div>
+    </div>
+  </aside>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb" id="crumb">양식·펜·리포트 관리</div>
+      <div class="topbar-right">
+        <div class="company-pill" id="company-pill">GUNZE 군제</div>
+        <div class="user"><div class="avatar">森</div>森 健二</div>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- ============================================= -->
+      <!-- 양식·펜·리포트 관리 (통합 메뉴 — 하위 탭 3개) -->
+      <!-- ============================================= -->
+      <section class="page active" id="page-form-hub">
+        <div class="page-head">
+          <div>
+            <div class="page-title">양식·펜·리포트 관리</div>
+            <div class="page-desc">GUNZE 군제 소속 양식·펜·리포트 템플릿을 한 메뉴에서 관리 · <span class="req-ref">FR-FRM, FR-CAP, FR-RPT</span></div>
+          </div>
+        </div>
+
+        <div class="hub-tabs">
+          <div class="hub-tab active" data-hub="hub-form">양식 관리</div>
+          <div class="hub-tab" data-hub="hub-pen">펜 관리</div>
+          <div class="hub-tab" data-hub="hub-report">리포트 관리</div>
+        </div>
+
+        <!-- 하위탭: 양식 관리 -->
+        <div class="hub-panel active" id="hub-form">
+          <div class="toolbar">
+            <div class="section-sub" style="margin:0;">양식 목록 · <span class="req-ref">FR-FRM-001/009/010/011/012</span></div>
+            <div class="filters">
+              <button class="btn" onclick="openModal('modal-bulk')">다품종 일괄 등록</button>
+              <button class="btn btn-primary" onclick="openModal('modal-register')">+ 신규 등록</button>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:14px;">
+            <div class="card-pad" style="padding-bottom:14px;">
+              <div class="filters">
+                <div class="field"><label>ID / Name</label><input class="input" placeholder="검색"></div>
+                <div class="field"><label>상태</label><select><option>전체</option><option>Printable</option><option>검토중</option></select></div>
+                <div class="field"><label>반복행 사용</label><select><option>전체</option><option>사용</option><option>미사용</option></select></div>
+                <div class="field"><label>&nbsp;</label><button class="btn btn-primary">검색</button></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <table>
+              <thead><tr><th>ID</th><th>Name</th><th>페이지</th><th>상태</th><th>반복행</th><th>Report Template</th><th>최종 수정</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td class="cell-strong clickable" onclick="openFormDetail('GUNZE-1')">GUNZE-1</td>
+                  <td>作業日報</td><td>1/1</td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Printable</span></td>
+                  <td><span class="badge badge-new"><span class="badge-dot"></span>사용 · 25행</span></td>
+                  <td><span class="badge badge-blue"><span class="badge-dot"></span>Doc·List 등록됨</span></td>
+                  <td>2026-07-30</td>
+                  <td><button class="btn btn-sm" onclick="openFormDetail('GUNZE-1')">조회</button> <button class="btn btn-sm" onclick="openEditor('GUNZE-1')">편집</button></td>
+                </tr>
+                <tr>
+                  <td class="cell-strong clickable" onclick="openFormDetail('GUNZE-2')">GUNZE-2</td>
+                  <td>受注伝票</td><td>1/1</td>
+                  <td><span class="badge badge-green"><span class="badge-dot"></span>Printable</span></td>
+                  <td><span class="badge badge-gray"><span class="badge-dot"></span>미사용</span></td>
+                  <td><button class="btn btn-sm" onclick="openModal('modal-report')">미등록</button></td>
+                  <td>2026-07-12</td>
+                  <td><button class="btn btn-sm" onclick="openFormDetail('GUNZE-2')">조회</button> <button class="btn btn-sm" onclick="openEditor('GUNZE-2')">편집</button></td>
+                </tr>
+                <tr>
+                  <td class="cell-strong clickable" onclick="openFormDetail('GUNZE-3')">GUNZE-3</td>
+                  <td>設備点検表</td><td>1/1</td>
+                  <td><span class="badge badge-amber"><span class="badge-dot"></span>검토중</span></td>
+                  <td><span class="badge badge-new"><span class="badge-dot"></span>사용 · 12행</span></td>
+                  <td><button class="btn btn-sm" onclick="openModal('modal-report')">미등록</button></td>
+                  <td>2026-08-01</td>
+                  <td><button class="btn btn-sm" onclick="openFormDetail('GUNZE-3')">조회</button> <button class="btn btn-sm" onclick="openEditor('GUNZE-3')">편집</button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="padding:11px 14px;font-size:11.5px;color:var(--text-sub);">총 38건 등록 (수백 종 규모 대량 등록 대응 <span class="req-ref">FR-FRM-011</span>)</div>
+          </div>
+        </div>
+
+        <!-- 하위탭: 펜 관리 -->
+        <div class="hub-panel" id="hub-pen">
+          <div class="section-sub" style="margin-bottom:14px;">자사 보유 펜 상태 모니터링 · <span class="req-ref">FR-CAP-003/004/005</span></div>
+          <div class="card">
+            <table>
+              <thead><tr><th>Device ID</th><th>모델</th><th>배터리</th><th>저장용량</th><th>기본 펜</th><th>상태</th></tr></thead>
+              <tbody>
+                <tr><td>9C:7B:D2:57:1F:D3</td><td>NWP-F70</td><td>76%</td><td>62% 사용</td><td>✔</td><td><span class="badge badge-green"><span class="badge-dot"></span>정상</span></td></tr>
+                <tr><td>9C:7B:D2:57:1F:E1</td><td>NWP-F70</td><td>12%</td><td>88% 사용</td><td>—</td><td><span class="badge badge-amber"><span class="badge-dot"></span>배터리 부족</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 하위탭: 리포트 관리 -->
+        <div class="hub-panel" id="hub-report">
+          <div class="section-sub" style="margin-bottom:14px;">Doc/List Excel 템플릿 현황 · <span class="req-ref">FR-RPT-001~006</span></div>
+          <div class="card">
+            <table>
+              <thead><tr><th>양식 ID</th><th>Doc Excel</th><th>List Excel</th><th>Default Template</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-strong">GUNZE-1</td><td>order_doc_v2.xlsx</td><td>order_list_v1.xlsx</td><td>그룹 공통</td><td><button class="btn btn-sm" onclick="openModal('modal-report')">설정</button></td></tr>
+                <tr><td class="cell-strong">GUNZE-2</td><td>—</td><td>—</td><td>미등록(자동생성)</td><td><button class="btn btn-sm" onclick="openModal('modal-report')">설정</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- FORM 조회(상세, 읽기 전용) -->
+      <!-- ============================================= -->
+      <section class="page" id="page-form-detail">
+        <div class="back-link" onclick="backToFormList()">← 양식 목록으로</div>
+        <div class="page-head">
+          <div>
+            <div class="page-title" id="detail-title">GUNZE-1 — 作業日報</div>
+            <div class="page-desc">양식 상세 조회 (읽기 전용) · <span class="req-ref">FR-FRM-009/010</span></div>
+          </div>
+          <div class="filters">
+            <button class="btn" onclick="openModal('modal-report')">리포트 템플릿 설정</button>
+            <button class="btn btn-primary" onclick="openEditor(document.getElementById('detail-title').textContent.split(' ')[0])">편집하기</button>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card card-pad">
+            <div class="section-title">기본 정보</div>
+            <div class="section-sub">등록 메타데이터</div>
+            <div style="display:flex;flex-direction:column;gap:0;">
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="color:var(--text-sub);">ID (Class-Version)</span><b>GUNZE-1</b></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="color:var(--text-sub);">Name</span><b>作業日報</b></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="color:var(--text-sub);">용지 규격</span><b>A4</b></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="color:var(--text-sub);">상태</span><span class="badge badge-green"><span class="badge-dot"></span>Printable</span></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="color:var(--text-sub);">필드 수</span><b>18개 (반복행 1개 그룹 포함)</b></div>
+              <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12.5px;"><span style="color:var(--text-sub);">최종 수정</span><b>2026-07-30 11:38 · 森 健二</b></div>
+            </div>
+          </div>
+
+          <div class="card card-pad">
+            <div class="section-title">PDF 미리보기</div>
+            <div class="section-sub">원본 양식 (NCode 적용 전)</div>
+            <div style="height:280px;background:#FAFBFC;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:12px;">
+              PDF 썸네일 영역
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-pad" style="margin-top:16px;">
+          <div class="section-title">반복행(Row Group) 요약 <span class="badge badge-new" style="margin-left:6px;"><span class="badge-dot"></span>차별화</span></div>
+          <div class="section-sub">DigiDox는 행마다 필드를 개별 정의하지만, 폼솔루션은 그룹을 한 번만 정의하고 반복 횟수를 지정합니다 <span class="req-ref">FR-FRM-006</span></div>
+          <table>
+            <thead><tr><th>그룹명</th><th>기준 필드 범위</th><th>반복 횟수</th><th>전개 방식</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">작업내역표</td><td>F.ITEM ~ F.QTY (5열)</td><td>25행 (고정)</td><td>행 단위 자동 전개·저장 <span class="req-ref">FR-EXT-007</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- FORM 편집기 -->
+      <!-- ============================================= -->
+      <section class="page" id="page-editor">
+        <div class="back-link" onclick="backToFormList()">← 양식 목록으로</div>
+        <div class="page-head">
+          <div>
+            <div class="page-title" id="editor-title">GUNZE-1 — 필드 편집</div>
+            <div class="page-desc">필드 정의 · 반복행 그룹 설정 · 시스템 필드 <span class="req-ref">FR-FRM-002~006</span></div>
+          </div>
+          <div class="filters">
+            <button class="btn">되돌리기</button>
+            <button class="btn btn-primary">저장</button>
+          </div>
+        </div>
+
+        <div class="editor-shell">
+          <div class="editor-canvas-wrap">
+            <div>
+              <div class="editor-toolbar">
+                <button class="btn btn-sm">+ 필드 추가</button>
+                <button class="btn btn-sm">− 삭제</button>
+                <button class="btn btn-sm">페이지 1 / 1</button>
+              </div>
+              <div class="doc-canvas">
+                <h3>作 業 日 報</h3>
+                <div class="doc-line" style="width:40%;"></div>
+                <div style="font-size:11px;color:#888;margin-bottom:18px;">日付：＿＿＿＿年＿＿月＿＿日</div>
+
+                <table class="doc-table">
+                  <thead><tr><th style="width:14%;">No.</th><th>作業内容</th><th style="width:16%;">数量</th><th style="width:16%;">単位</th><th style="width:20%;">担当</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td style="position:relative;height:26px;"><div class="field-box repeat" style="left:2px;top:2px;right:2px;bottom:2px;">F.WORK[n]</div></td><td style="position:relative;"><div class="field-box repeat" style="left:2px;top:2px;right:2px;bottom:2px;">F.QTY[n]</div></td><td></td><td></td></tr>
+                    <tr><td>2</td><td></td><td></td><td></td><td></td></tr>
+                    <tr><td>⋮</td><td colspan="4" style="text-align:center;color:#aaa;">반복행 그룹 · 25행까지 자동 전개</td></tr>
+                  </tbody>
+                </table>
+
+                <div style="position:relative;height:30px;margin-top:20px;">
+                  <div class="field-box sys" style="left:0;top:0;width:120px;height:20px;">S.FORM_ID</div>
+                  <div class="field-box sys" style="right:0;top:0;width:100px;height:20px;">S.SEQ</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="editor-side">
+            <div class="side-tabs">
+              <div class="side-tab active" data-tab="attr">필드 속성</div>
+              <div class="side-tab" data-tab="repeat">반복행</div>
+              <div class="side-tab" data-tab="sys">시스템 필드</div>
+            </div>
+
+            <div class="side-panel active" id="tab-attr">
+              <div class="kv-field"><label>아이디</label><input class="input" value="F.WORK"></div>
+              <div class="kv-field"><label>영역명</label><input class="input" placeholder="作業内容"></div>
+              <div class="kv-field"><label>입력 형식</label>
+                <select class="input">
+                  <option>Text (SINGLE_LINE)</option><option>Text (WORD)</option><option>Text (MULTI_LINE)</option>
+                  <option selected>Text (AI OCR 용)</option><option>Check</option><option>Radio</option><option>Image</option>
+                </select>
+              </div>
+              <div class="kv-field"><label>인쇄 영역</label><select class="input"><option>지정</option><option>미지정</option></select></div>
+              <div class="kv-field"><label>인식 영역</label><select class="input"><option selected>Enabled</option><option>Disabled</option></select></div>
+              <div style="display:flex;gap:8px;">
+                <div class="kv-field" style="flex:1;"><label>Top</label><input class="input" value="356"></div>
+                <div class="kv-field" style="flex:1;"><label>Left</label><input class="input" value="102"></div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <div class="kv-field" style="flex:1;"><label>Width</label><input class="input" value="221"></div>
+                <div class="kv-field" style="flex:1;"><label>Height</label><input class="input" value="25"></div>
+              </div>
+            </div>
+
+            <div class="side-panel" id="tab-repeat">
+              <div class="repeat-hero">
+                <div class="repeat-hero-title">✦ 반복행(Row Group) — 신규 차별화</div>
+                <div class="repeat-hero-desc">한 번만 구조를 정의하면 지정한 횟수만큼 자동으로 전개됩니다. DigiDox처럼 행마다 필드를 25개 따로 만들 필요가 없습니다.</div>
+              </div>
+              <div class="kv-field"><label>그룹명</label><input class="input" value="작업내역표"></div>
+              <div class="kv-field"><label>기준 필드 범위</label><input class="input" value="F.WORK ~ F.QTY"></div>
+              <div class="kv-field"><label>반복 횟수</label>
+                <select class="input"><option>고정 횟수 입력</option><option>데이터 개수만큼 자동</option></select>
+              </div>
+              <div class="kv-field"><label>고정 횟수</label><input class="input" value="25"></div>
+              <div class="kv-field"><label>전개 방식</label><select class="input"><option>행 단위 자동 전개 후 저장</option></select></div>
+              <button class="btn btn-primary btn-sm" style="width:100%;margin-top:6px;">그룹 미리보기 (3행 샘플)</button>
+              <div class="stub-note">추출 시 이 범위를 행 단위로 자동 반복 저장합니다. <span class="req-ref">FR-FRM-006, FR-EXT-007</span></div>
+            </div>
+
+            <div class="side-panel" id="tab-sys">
+              <div class="section-sub" style="margin-bottom:10px;">인쇄 시 지면에 자동 출력할 시스템 필드를 선택하세요 <span class="req-ref">FR-FRM-005</span></div>
+              <div class="sys-check-row"><input type="checkbox" checked><span>S.FORM_ID — 양식 ID</span></div>
+              <div class="sys-check-row"><input type="checkbox" checked><span>S.SEQ — 문서 일련번호</span></div>
+              <div class="sys-check-row"><input type="checkbox"><span>S.PRINT_INFO — 인쇄 정보</span></div>
+              <div class="sys-check-row"><input type="checkbox"><span>S.PAGE_NO — 페이지 번호</span></div>
+              <div class="sys-check-row"><input type="checkbox"><span>S.OWNER_ID — 소유자 ID</span></div>
+              <div class="sys-check-row"><input type="checkbox"><span>S.OWNER_NAME — 소유자명</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 나머지 관리자 메뉴 (경량 스텁) -->
+      <!-- ============================================= -->
+      <section class="page" id="page-org">
+        <div class="page-head"><div><div class="page-title">조직·사용자·권한 관리</div><div class="page-desc">자사 사용자 등록/승인, 권한 레벨 부여 · <span class="req-ref">FR-SYS-001/002</span></div></div>
+          <button class="btn btn-primary">+ 사용자 등록</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>이름</th><th>이메일</th><th>권한</th><th>상태</th><th>등록일</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">森 健二</td><td>kenji.mori@gunze.co.jp</td><td><span class="badge badge-blue"><span class="badge-dot"></span>그룹 관리자</span></td><td><span class="badge badge-green"><span class="badge-dot"></span>Approval</span></td><td>2025-03-10</td></tr>
+              <tr><td class="cell-strong">伊藤 浩</td><td>hiroshi.ito@gunze.co.jp</td><td><span class="badge badge-gray"><span class="badge-dot"></span>일반 사용자</span></td><td><span class="badge badge-green"><span class="badge-dot"></span>Approval</span></td><td>2026-04-11</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="page" id="page-data">
+        <div class="page-head"><div><div class="page-title">자사 전체 데이터 조회</div><div class="page-desc">자사 전체 통계 및 문서 목록 · <span class="req-ref">FR-VIW-001~008</span></div></div></div>
+        <div class="grid grid-3" style="margin-bottom:14px;">
+          <div class="card card-pad"><div class="cell-sub">등록 양식</div><div style="font-size:22px;font-weight:800;">38</div></div>
+          <div class="card card-pad"><div class="cell-sub">이번 달 문서</div><div style="font-size:22px;font-weight:800;">312</div></div>
+          <div class="card card-pad"><div class="cell-sub">평균 처리 시간</div><div style="font-size:22px;font-weight:800;">2.1초</div></div>
+        </div>
+        <div class="stub-note">Document 전체 목록 · 원본 대조 뷰는 관리자 콘솔(index.html)의 Document 화면 참고.</div>
+      </section>
+
+      <!-- ============================================= -->
+      <!-- 현장 사용자 -->
+      <!-- ============================================= -->
+      <section class="page" id="page-f-print">
+        <div class="page-head"><div><div class="page-title">문서 인쇄</div><div class="page-desc">양식을 선택해 인쇄 요청 · <span class="req-ref">FR-PRT-001~007</span></div></div></div>
+        <div class="card card-pad" style="margin-bottom:14px;">
+          <div class="filters">
+            <div class="field"><label>양식 선택</label><select class="input"><option>GUNZE-1 · 作業日報</option><option>GUNZE-2 · 受注伝票</option></select></div>
+            <div class="field"><label>매수</label><input class="input" value="1"></div>
+            <div class="field"><label>&nbsp;</label><button class="btn btn-primary">인쇄 요청</button></div>
+          </div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>양식</th><th>매수</th><th>상태</th><th>요청 시각</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">GUNZE-1</td><td>1</td><td><span class="badge badge-green"><span class="badge-dot"></span>완료</span></td><td>08-03 09:12</td></tr>
+              <tr><td class="cell-strong">GUNZE-1</td><td>1</td><td><span class="badge badge-amber"><span class="badge-dot"></span>대기</span></td><td>08-03 08:58</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="page" id="page-f-upload">
+        <div class="page-head"><div><div class="page-title">필기 업로드</div><div class="page-desc">펜 데이터 업로드 및 이력 확인 · <span class="req-ref">FR-CAP-001/002/006/010/011</span></div></div></div>
+        <div class="card card-pad" style="margin-bottom:14px;">
+          <div class="dropzone">USB로 연결된 펜을 인식했습니다 — <b>9C:7B:D2:57:1F:D3</b><br><span class="sub">업로드 대기 문서 3건 · 오프라인 누적분 포함</span></div>
+          <button class="btn btn-primary" style="margin-top:12px;">일괄 업로드</button>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>Seq</th><th>Form ID</th><th>용량</th><th>상태</th><th>시각</th></tr></thead>
+            <tbody>
+              <tr><td>13048</td><td class="cell-strong">GUNZE-1</td><td>118,018B</td><td><span class="badge badge-green"><span class="badge-dot"></span>Success</span></td><td>07-30 18:35</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="page" id="page-f-result">
+        <div class="page-head"><div><div class="page-title">추출 결과 확인</div><div class="page-desc">본인이 작성한 문서의 원본 대조 · <span class="req-ref">FR-VIW-003/004</span></div></div></div>
+        <div class="grid grid-2">
+          <div class="card card-pad">
+            <div class="cell-sub" style="margin-bottom:8px;">원본 필기 이미지</div>
+            <div style="height:220px;background:repeating-linear-gradient(#fff 0 22px,#EFF1F5 22px 23px);border:1px solid var(--border);border-radius:6px;"></div>
+          </div>
+          <div class="card card-pad">
+            <div class="cell-sub" style="margin-bottom:8px;">추출 결과</div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span>作業内容</span><b>設備点検</b></div>
+            <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:12.5px;"><span>数量</span><b>3</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-f-report">
+        <div class="page-head"><div><div class="page-title">리포트 다운로드</div><div class="page-desc">원본 PDF · 필기 이미지 · Excel 리포트 다운로드 · <span class="req-ref">FR-RPT-007</span></div></div></div>
+        <div class="card">
+          <table>
+            <thead><tr><th>문서</th><th>작성일</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-strong">GUNZE-1 · 13048</td><td>2026-07-30</td><td><button class="btn btn-sm">PDF</button> <button class="btn btn-sm">이미지</button> <button class="btn btn-sm">Excel</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: 신규 등록 ===================== -->
+<div class="modal-overlay" id="modal-register">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">양식 신규 등록</div><div class="modal-close" onclick="closeModal('modal-register')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-row"><label>ID (Class-Version)</label><input class="input" placeholder="예: GUNZE-4"><span class="hint">Class 입력 시 다음 버전 번호가 자동 제안됩니다</span></div>
+      <div class="form-row"><label>Name</label><input class="input" placeholder="예: 出荷指示書"></div>
+      <div class="form-row"><label>PDF File</label>
+        <div class="dropzone">PDF 파일을 이곳에 드래그하거나 <b>찾아보기</b><div class="sub">A7 ~ A2 용지 규격 지원</div></div>
+      </div>
+      <div class="form-row"><label>반복행(Row Group) 사용</label>
+        <select class="input"><option>사용 안 함</option><option>등록 후 편집기에서 설정</option></select>
+      </div>
+      <div class="form-row"><label>Memo</label><textarea placeholder="선택 입력"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-register')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-register'); openEditor('GUNZE-4');">등록하고 편집기로 이동</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: 다품종 일괄 등록 ===================== -->
+<div class="modal-overlay" id="modal-bulk">
+  <div class="modal wide">
+    <div class="modal-head"><div class="modal-title">다품종 양식 일괄 등록</div><div class="modal-close" onclick="closeModal('modal-bulk')">✕</div></div>
+    <div class="modal-body">
+      <div class="dropzone">PDF 파일 여러 개를 이곳에 드래그하거나 <b>폴더 선택</b><div class="sub">최대 500개 · 파일명 기반 ID(Class-Version) 자동 제안</div></div>
+      <table class="bulk-table">
+        <thead><tr><th>No.</th><th>파일명</th><th>제안 ID</th><th>제안 Name</th><th>상태</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>gunze_shukka_01.pdf</td><td><input class="input" value="GUNZE-4"></td><td><input class="input" value="出荷指示書"></td><td><span class="badge badge-green"><span class="badge-dot"></span>준비됨</span></td></tr>
+          <tr><td>2</td><td>gunze_kensa_02.pdf</td><td><input class="input" value="GUNZE-5"></td><td><input class="input" value="検査記録表"></td><td><span class="badge badge-green"><span class="badge-dot"></span>준비됨</span></td></tr>
+          <tr><td>3</td><td>gunze_kensa_02_copy.pdf</td><td><input class="input" value="GUNZE-5" style="border-color:var(--danger);"></td><td><input class="input" value="検査記録表"></td><td><span class="badge badge-amber"><span class="badge-dot"></span>ID 중복</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-bulk')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-bulk')">2건 일괄 등록 (1건 제외)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: 리포트 템플릿 설정 ===================== -->
+<div class="modal-overlay" id="modal-report">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Report Template 설정</div><div class="modal-close" onclick="closeModal('modal-report')">✕</div></div>
+    <div class="modal-body">
+      <div class="form-row"><label>SRC File</label><div class="dropzone" style="padding:14px;">원본 소스 파일 (인쇄용 PDF 이전 단계) — <b>찾아보기</b></div></div>
+      <div class="form-row"><label>PDF File</label><div class="dropzone" style="padding:14px;">NCode 적용된 인쇄용 PDF — <b>찾아보기</b> / 다운로드</div></div>
+      <div class="form-row">
+        <label>Doc Excel (1건 상세)</label>
+        <div class="dropzone" style="padding:14px;">order_doc_v2.xlsx 등록됨 — <b>교체</b></div>
+      </div>
+      <div class="form-row">
+        <label>List Excel (다건 집계)</label>
+        <div class="dropzone" style="padding:14px;">order_list_v1.xlsx 등록됨 — <b>교체</b></div>
+      </div>
+      <div class="form-row">
+        <label>필드ID 플레이스홀더 <span class="hint">— 엑셀 셀에 그대로 붙여넣으세요</span></label>
+        <div>
+          <span class="field-id-chip">[F.WORK]</span><span class="field-id-chip">[F.QTY]</span><span class="field-id-chip">[S.FORM_ID]</span><span class="field-id-chip">[S.SEQ]</span><span class="field-id-chip">[S.OWNER_NAME]</span>
+        </div>
+      </div>
+      <div class="form-row"><label><input type="checkbox" checked> Default Template 사용 (그룹 공통)</label></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('modal-report')">취소</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-report')">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function selectPage(pageKey){
+    document.querySelectorAll('.nav-item[data-page]').forEach(n=>n.classList.toggle('active', n.dataset.page===pageKey));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    const target = document.getElementById('page-'+pageKey);
+    if(target) target.classList.add('active');
+    const activeNav = document.querySelector('.nav-item[data-page="'+pageKey+'"]');
+    document.getElementById('crumb').textContent = activeNav ? activeNav.textContent.trim() : pageKey;
+  }
+  document.querySelectorAll('.nav-item[data-page]').forEach(item=>{
+    item.addEventListener('click', ()=>selectPage(item.dataset.page));
+  });
+
+  function openFormDetail(id){
+    document.getElementById('detail-title').textContent = id + ' — 作業日報';
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-form-detail').classList.add('active');
+    document.getElementById('crumb').textContent = '양식·펜·리포트 관리 / 양식 조회';
+  }
+  function openEditor(id){
+    document.getElementById('editor-title').textContent = id + ' — 필드 편집';
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-editor').classList.add('active');
+    document.getElementById('crumb').textContent = '양식·펜·리포트 관리 / 필드 편집';
+  }
+  function backToFormList(){
+    selectPage('form-hub');
+    document.querySelectorAll('.hub-tab').forEach(t=>t.classList.toggle('active', t.dataset.hub==='hub-form'));
+    document.querySelectorAll('.hub-panel').forEach(p=>p.classList.toggle('active', p.id==='hub-form'));
+  }
+
+  document.querySelectorAll('.hub-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.hub-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.hub-panel').forEach(p=>p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.hub).classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.side-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      const group = tab.parentElement.parentElement;
+      group.querySelectorAll('.side-tab').forEach(t=>t.classList.remove('active'));
+      group.querySelectorAll('.side-panel').forEach(p=>p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  function openModal(id){ document.getElementById(id).classList.add('open'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal-overlay').forEach(ov=>{
+    ov.addEventListener('click', e=>{ if(e.target===ov) ov.classList.remove('open'); });
+  });
+
+  // role switch (customer portal: 고객사 관리자 / 현장 사용자)
+  const ROLE_PAGES = {
+    admin: 'form-hub',
+    field: 'f-print'
+  };
+  document.querySelectorAll('.role-tab').forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      document.querySelectorAll('.role-tab').forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      document.querySelectorAll('.nav-group[data-role]').forEach(g=>{
+        g.classList.toggle('role-hidden', g.dataset.role !== tab.dataset.role);
+      });
+      document.getElementById('foot-role').textContent = (tab.dataset.role==='admin' ? '고객사 관리자' : '현장 사용자') + ' 로그인';
+      selectPage(ROLE_PAGES[tab.dataset.role]);
+    });
+  });
+</script>
+</body>
+</html>

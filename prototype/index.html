@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Form Studio — 양식 편집기</title>
+  <link rel="stylesheet" href="styles.css?v=20260819-first-row-repeat" />
+  <link rel="stylesheet" href="settings.css?v=20260819-first-row-repeat" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-block">
+      <span class="brand-glyph">F</span>
+      <div><strong>FORM STUDIO</strong><small>Paper to structured data</small></div>
+    </div>
+    <div class="document-title" id="documentTitle">
+      <button class="icon-button" id="headerBackBtn" aria-label="뒤로">←</button>
+      <div><b>양식 관리</b><span>데이터 수집 양식을 만들고 관리합니다.</span></div>
+    </div>
+    <div class="header-actions" id="editorHeaderActions" hidden>
+      <span class="save-state"><i></i> 변경사항 저장됨</span>
+      <button class="button subtle" id="testBtn">▷ 데이터 테스트</button>
+      <button class="button primary" id="finishBtn">편집 완료</button>
+    </div>
+  </header>
+
+  <nav class="main-navigation" aria-label="주요 메뉴">
+    <button class="active" data-app-view="dashboard"><span>⌂</span><b>대시보드</b><small>현황·빠른 실행</small></button><i></i>
+    <button data-app-view="forms"><span>▤</span><b>양식 관리</b><small>업로드·편집</small></button><i></i>
+    <button data-app-view="records"><span>▧</span><b>문서 조회</b><small>가져오기·검수</small></button>
+  </nav>
+
+  <section class="app-page app-view dashboard-page" id="dashboardView">
+    <div class="page-heading dashboard-heading"><div><small>WORKSPACE OVERVIEW</small><h1>대시보드</h1><p id="dashboardDescription">우리 회사의 양식·문서·AI OCR 사용 현황을 확인합니다.</p></div><div class="dashboard-controls"><div class="dashboard-scope" id="dashboardScope"><button class="active" data-dashboard-scope="customer">고객사</button><button data-dashboard-scope="system">시스템 관리자</button></div><select aria-label="조회 기간"><option>최근 30일</option><option>오늘</option><option>최근 7일</option><option>이번 달</option><option>직접 설정</option></select><div class="dashboard-date"><small>기준 일시</small><b>2026.08.18 16:40</b></div></div></div>
+    <div id="customerDashboard">
+    <div class="dashboard-kpis customer-kpis compact-kpis">
+      <article class="dashboard-kpi navy split-kpi"><div><span>♙</span><small>현재 기준</small></div><h2>사용자</h2><div class="split-values"><b>5<small>전체 등록</small></b><i></i><b>3<small>활성</small></b></div></article>
+      <article class="dashboard-kpi blue split-kpi"><div><span>▤</span><small>현재 기준</small></div><h2>양식</h2><div class="split-values"><b>2<small>전체</small></b><i></i><b>1<small>인쇄 가능</small></b></div></article>
+      <article class="dashboard-kpi green split-kpi"><div><span>▧</span><small>최근 30일</small></div><h2>문서</h2><div class="split-values"><b id="dashboardTotalDocuments">4<small>전체</small></b><i></i><b>2<small>완료</small></b></div></article>
+      <article class="dashboard-kpi amber split-kpi"><div><span>!</span><small>지금 확인</small></div><h2>처리 필요</h2><div class="split-values"><b id="dashboardWriteCount">1<small>작성</small></b><i></i><b>2<small>확인 필요 필드</small></b></div></article>
+    </div>
+    <div class="dashboard-grid">
+      <section class="dashboard-panel recent-panel"><div class="dashboard-panel-title"><div><small>RECENT DOCUMENTS</small><h2>최근 문서</h2></div><button id="dashboardRecordsBtn">전체 문서 보기 →</button></div><table><thead><tr><th>문서 번호</th><th>양식</th><th>소유자</th><th>상태</th><th>최근 일시</th></tr></thead><tbody><tr><td>13051</td><td>시설 이용 신청서</td><td>김민준</td><td><span class="document-state print">인쇄</span></td><td>2026.08.18 15:02</td></tr><tr><td>13048</td><td>시설 이용 신청서</td><td>김민준</td><td><span class="document-state write">작성</span></td><td>2026.08.18 14:32</td></tr><tr><td>13049</td><td>시설 이용 신청서</td><td>이서연</td><td><span class="document-state complete">완료</span></td><td>2026.08.17 11:08</td></tr></tbody></table></section>
+      <section class="dashboard-panel quick-panel"><div class="dashboard-panel-title"><div><small>QUICK ACTIONS</small><h2>빠른 실행</h2></div></div><button id="dashboardNewFormBtn"><span>＋</span><div><b>새 양식 만들기</b><small>빈 PDF를 업로드하고 필드를 정의합니다.</small></div><em>→</em></button><button id="dashboardImportBtn"><span>↥</span><div><b>펜 데이터 가져오기</b><small>연결된 스마트펜의 필기 페이지를 가져옵니다.</small></div><em>→</em></button><button id="dashboardFormsBtn"><span>▤</span><div><b>양식 관리 열기</b><small>양식 상태와 프린트 가능 여부를 확인합니다.</small></div><em>→</em></button></section>
+    </div>
+    <section class="dashboard-panel recent-panel"><div class="dashboard-panel-title"><div><small>AI OCR USAGE</small><h2>우리 회사 AI OCR 사용량</h2></div><span class="usage-period">이번 달</span></div><div class="ocr-usage"><div class="usage-meter"><div><strong>742</strong><span>/ 1,000 페이지</span></div><i><em style="width:74.2%"></em></i><small>월 사용량의 74.2%를 사용했습니다.</small></div><div class="usage-stats"><span><small>OCR 문서</small><b>186건</b></span><span><small>인식 필드</small><b>4,830개</b></span><span><small>성공률</small><b>98.4%</b></span><span><small>평균 처리</small><b>8.2초</b></span><span><small>재처리</small><b>12건</b></span></div></div></section>
+    <div class="usage-ranking-grid"><section class="dashboard-panel ranking-panel"><div class="dashboard-panel-title"><div><small>TOP USERS</small><h2>문서 사용량 상위 사용자</h2></div><span class="usage-period">최근 30일</span></div><ol><li><b>1</b><span><strong>김민준</strong><small>시설관리팀</small></span><em>42건</em></li><li><b>2</b><span><strong>이서연</strong><small>운영지원팀</small></span><em>31건</em></li><li><b>3</b><span><strong>박준호</strong><small>품질관리팀</small></span><em>24건</em></li></ol></section><section class="dashboard-panel ranking-panel"><div class="dashboard-panel-title"><div><small>TOP FORMS</small><h2>많이 사용한 양식</h2></div><span class="usage-period">최근 30일</span></div><ol><li><b>1</b><span><strong>시설 이용 신청서</strong><small>FORM-001</small></span><em>68건</em></li><li><b>2</b><span><strong>시설 점검 기록지</strong><small>FORM-002</small></span><em>21건</em></li><li><b>3</b><span><strong>입고 검사표</strong><small>FORM-003</small></span><em>8건</em></li></ol></section></div>
+    </div>
+    <div id="systemDashboard" hidden>
+      <div class="dashboard-kpis system-kpis">
+        <article class="dashboard-kpi blue"><div><span>▦</span><small>TENANT</small></div><b>18</b><h2>이용 고객사</h2><p>현재 서비스 사용 상태인 고객사</p></article>
+        <article class="dashboard-kpi navy"><div><span>♙</span><small>USER</small></div><b>96</b><h2>전체 등록 사용자</h2><p>전체 고객사에 등록된 계정</p></article>
+        <article class="dashboard-kpi green"><div><span>●</span><small>ACTIVE</small></div><b>73</b><h2>활성 사용자</h2><p>현재 서비스 사용이 가능한 계정</p></article>
+        <article class="dashboard-kpi green"><div><span>＋</span><small>NEW</small></div><b>2</b><h2>최근 등록 고객사</h2><p>최근 30일 이내 새로 등록</p></article>
+        <article class="dashboard-kpi amber"><div><span>−</span><small>CHURN</small></div><b>0</b><h2>최근 해지 고객사</h2><p>최근 30일 이내 사용 종료</p></article>
+      </div>
+      <div class="system-usage-grid">
+        <section class="dashboard-panel system-ocr"><div class="dashboard-panel-title"><div><small>PLATFORM AI USAGE</small><h2>전체 AI OCR 사용량</h2></div><span class="usage-period">최근 30일</span></div><div class="system-ocr-summary"><div><small>처리 페이지</small><b>12,480</b><em>전월 대비 +8.4%</em></div><div><small>OCR 문서</small><b>8,920</b><em>성공률 98.1%</em></div><div><small>인식 필드</small><b>286,400</b><em>재처리율 2.7%</em></div><div><small>예상 비용</small><b>¥184,200</b><em>예산의 61.4%</em></div></div><div class="monthly-bars" aria-label="최근 6개월 OCR 사용량 그래프"><span style="--h:42%"><i></i><small>3월</small></span><span style="--h:54%"><i></i><small>4월</small></span><span style="--h:48%"><i></i><small>5월</small></span><span style="--h:66%"><i></i><small>6월</small></span><span style="--h:78%"><i></i><small>7월</small></span><span style="--h:88%"><i></i><small>8월</small></span></div></section>
+        <section class="dashboard-panel system-alerts"><div class="dashboard-panel-title"><div><small>OPERATION ALERTS</small><h2>운영 확인</h2></div></div><div class="system-alert ok"><span>✓</span><div><b>AI OCR 성공률 정상</b><small>전체 성공률 98.1%</small></div></div><div class="system-alert warn"><span>!</span><div><b>사용량 80% 이상 고객사</b><small>이츠와 외 1개 고객사</small></div><em>2</em></div><div class="system-alert danger"><span>×</span><div><b>처리 오류 확인 필요</b><small>시간 초과·응답 형식 오류</small></div><em>7</em></div></section>
+      </div>
+      <section class="dashboard-panel recent-panel tenant-panel"><div class="dashboard-panel-title"><div><small>TENANT USAGE</small><h2>고객사별 사용자·AI OCR 현황</h2></div><button>전체 고객사 보기 →</button></div><table><thead><tr><th>고객사</th><th>등록 사용자</th><th>활성 사용자</th><th>OCR 문서</th><th>OCR 페이지</th><th>성공률</th><th>월 한도</th></tr></thead><tbody><tr><td><b>ITSUWA</b><small>이츠와</small></td><td>18</td><td>16</td><td>1,240</td><td>1,320</td><td>98.5%</td><td><span class="quota warn">82%</span></td></tr><tr><td><b>KOTOBUKI</b><small>고토부키</small></td><td>12</td><td>10</td><td>580</td><td>740</td><td>97.9%</td><td><span class="quota">46%</span></td></tr><tr><td><b>YAMATO</b><small>야마토</small></td><td>9</td><td>8</td><td>412</td><td>505</td><td>99.1%</td><td><span class="quota">38%</span></td></tr></tbody></table></section>
+      <div class="usage-ranking-grid"><section class="dashboard-panel ranking-panel"><div class="dashboard-panel-title"><div><small>TOP OCR TENANTS</small><h2>AI OCR 사용량 상위 고객사</h2></div><span class="usage-period">최근 30일</span></div><ol><li><b>1</b><span><strong>ITSUWA</strong><small>이츠와</small></span><em>1,320페이지</em></li><li><b>2</b><span><strong>KOTOBUKI</strong><small>고토부키</small></span><em>740페이지</em></li><li><b>3</b><span><strong>YAMATO</strong><small>야마토</small></span><em>505페이지</em></li></ol></section><section class="dashboard-panel ranking-panel"><div class="dashboard-panel-title"><div><small>TOP DOCUMENT TENANTS</small><h2>문서 처리량 상위 고객사</h2></div><span class="usage-period">최근 30일</span></div><ol><li><b>1</b><span><strong>ITSUWA</strong><small>이츠와</small></span><em>1,240건</em></li><li><b>2</b><span><strong>KOTOBUKI</strong><small>고토부키</small></span><em>580건</em></li><li><b>3</b><span><strong>YAMATO</strong><small>야마토</small></span><em>412건</em></li></ol></section></div>
+    </div>
+  </section>
+
+  <section class="app-page app-view" id="formsView" hidden>
+    <div class="page-heading"><div><small>TEMPLATE LIBRARY</small><h1>양식 관리</h1><p>빈 양식을 데이터 수집 템플릿으로 만들고 테스트합니다.</p></div><button class="button primary" id="newTemplateBtn">＋ 빈 양식 업로드</button></div>
+    <div class="forms-table"><div class="forms-toolbar"><label>⌕ <input placeholder="양식 ID·양식명 검색"></label><div><button class="active">전체</button><button>Printable</button><button>Not Printable</button></div></div><table><thead><tr><th>양식 ID</th><th>양식명</th><th>페이지</th><th>필드</th><th>프린트 상태</th><th>등록일</th><th>수정일</th><th>작업</th></tr></thead><tbody><tr class="draft-form-row form-table-row" id="draftFormRow" tabindex="0"><td>FORM-002</td><td><b>시설 점검 기록지</b><small>facility_inspection</small></td><td>1</td><td>6</td><td><div class="print-state-cell"><select class="form-print-select not-printable" disabled><option>Not Printable</option></select><small>편집 미완료</small></div></td><td>2026.08.19 09:20</td><td>2026.08.19 10:05</td><td><div class="row-actions"><button disabled>프린트</button></div></td></tr><tr id="printableFormRow" class="form-table-row" tabindex="0"><td>FORM-001</td><td><b>시설 이용 신청서</b><small>facility_application</small></td><td>1</td><td>11</td><td><div class="print-state-cell"><select class="form-print-select printable" id="printStatusSelect"><option value="printable">Printable</option><option value="not_printable">Not Printable</option></select><small id="printStatusReason">프린트 허용</small></div></td><td>2026.08.14 10:20</td><td>2026.08.18 16:40</td><td><div class="row-actions"><button id="printTemplateBtn">프린트</button></div></td></tr></tbody></table></div>
+  </section>
+
+  <section class="app-page app-view" id="recordsView" hidden>
+    <div class="page-heading"><div><small>DOCUMENTS</small><h1>문서 조회</h1><p>인쇄된 문서부터 작성·검수 완료된 데이터까지 확인합니다.</p></div><button class="button primary" id="openDataImportBtn">↑ 데이터 가져오기</button></div>
+    <div class="document-status-guide"><span class="print"><b>인쇄</b><small>인쇄 후 아직 필기 데이터가 없는 문서</small></span><i></i><span class="write"><b>작성</b><small>스마트펜 필기 데이터가 한 번 이상 등록된 문서</small></span><i></i><span class="complete"><b>완료</b><small>OCR 검수와 최종 확정이 끝난 문서</small></span></div>
+    <div class="record-summary"><span><small>전체 문서</small><b id="totalDocumentCount">4</b></span><span><small>인쇄</small><b id="printDocumentCount">1</b></span><span class="warn"><small>작성</small><b id="writeDocumentCount">1</b></span><span class="done"><small>완료</small><b id="completeDocumentCount">2</b></span></div>
+    <div class="records-table"><div class="records-toolbar"><label>⌕ <input placeholder="문서 번호·양식명 검색"></label><div><button class="active">전체</button><button>인쇄</button><button>작성</button><button>완료</button></div></div><table><thead><tr><th>No.</th><th>양식</th><th>페이지</th><th>소유자</th><th>상태</th><th>인쇄 / 작성 일시</th><th></th></tr></thead><tbody id="documentRows"><tr><td>13051</td><td><b>시설 이용 신청서</b><small>facility_application</small></td><td>1</td><td>김민준<small>jimin.kim@neolab.net</small></td><td><span class="document-state print">인쇄</span></td><td>2026.08.18 15:02<small>—</small></td><td><button class="view-record">조회</button></td></tr><tr><td>13048</td><td><b>시설 이용 신청서</b><small>facility_application</small></td><td>1</td><td>김민준<small>jimin.kim@neolab.net</small></td><td><span class="document-state write">작성</span></td><td>2026.08.18 13:53<small>2026.08.18 14:32</small></td><td><button class="view-record">조회</button></td></tr><tr><td>13049</td><td><b>시설 이용 신청서</b><small>facility_application</small></td><td>1</td><td>이서연<small>seoyeon.lee@neolab.net</small></td><td><span class="document-state complete">완료</span></td><td>2026.08.17 10:10<small>2026.08.17 11:08</small></td><td><button class="view-record">조회</button></td></tr><tr><td>13039</td><td><b>시설 이용 신청서</b><small>facility_application</small></td><td>1</td><td>박준호<small>junho.park@neolab.net</small></td><td><span class="document-state complete">완료</span></td><td>2026.08.16 15:22<small>2026.08.16 16:45</small></td><td><button class="view-record">조회</button></td></tr></tbody></table></div>
+  </section>
+
+  <div class="tool-strip" id="editorToolbar" hidden>
+    <div class="tool-group">
+      <button class="tool active" title="선택">↖ <span>선택</span></button>
+      <button class="tool" title="손 도구">✋ <span>이동</span></button>
+    </div>
+    <div class="tool-group">
+      <button class="tool" id="undoBtn" title="실행 취소">↶</button>
+      <button class="tool" id="redoBtn" title="다시 실행">↷</button>
+    </div>
+    <div class="tool-group field-quick-tools">
+      <button class="tool" id="copyFieldBtn" title="필드 복사 (Ctrl/Cmd+C)">⧉ <span>복사</span></button>
+      <button class="tool" id="pasteFieldBtn" title="필드 붙여넣기 (Ctrl/Cmd+V)">▣ <span>붙여넣기</span></button>
+      <button class="tool danger-tool" id="deleteFieldQuickBtn" title="필드 삭제 (Delete)">⌫ <span>삭제</span></button>
+    </div>
+    <div class="tool-group zoom-group">
+      <button class="tool" id="zoomOut">−</button><span id="zoomLabel">85%</span><button class="tool" id="zoomIn">＋</button>
+      <button class="tool fit" id="fitBtn">화면 맞춤</button>
+    </div>
+    <button class="ai-action" id="aiBtn"><span>✦</span> AI 자동 추천</button>
+    <div class="page-switch"><button>‹</button><span>페이지 <b>1</b> / 1</span><button>›</button></div>
+  </div>
+
+  <main class="editor-shell app-view" id="editorView" hidden>
+    <aside class="left-sidebar">
+      <section class="add-panel">
+        <div class="section-title"><div><small>ADD</small><h2>필드 추가</h2></div><button class="collapse">−</button></div>
+        <p class="section-help">클릭하면 자동 배치 · 끌어서 원하는 위치에 놓기</p>
+        <div class="component-grid">
+          <button class="component-card" draggable="true" data-type="text"><span class="component-icon text-icon">T</span><b>텍스트</b><small>한 줄 · 여러 줄</small></button>
+          <button class="component-card" draggable="true" data-type="number"><span class="component-icon number-icon">#</span><b>숫자</b><small>정수 · 소수</small></button>
+          <button class="component-card" draggable="true" data-type="date"><span class="component-icon date-icon">日</span><b>날짜</b><small>연 · 월 · 일</small></button>
+          <button class="component-card" draggable="true" data-type="time"><span class="component-icon time-icon">時</span><b>시간</b><small>시 · 분</small></button>
+          <button class="component-card" draggable="true" data-type="check"><span class="component-icon check-icon">✓</span><b>체크 판정</b><small>V · X · 빈칸</small></button>
+          <button class="component-card" draggable="true" data-type="choice"><span class="component-icon choice-icon">●</span><b>선택</b><small>단일 · 다중</small></button>
+        </div>
+        <div class="structure-add" hidden><small>STRUCTURE</small><button class="component-card repeat-card" draggable="true" data-type="repeat"><span class="component-icon repeat-icon">↻</span><b>반복 그룹</b><small>선택 필드를 배열로 묶기</small></button><button class="repeat-example-button" id="repeatExampleBtn"><span>✦</span><b>ITSUWA 반복행 예시</b><small>첫 행 필드를 자동 배치해 체험</small></button></div>
+      </section>
+
+      <section class="outline-panel">
+        <div class="outline-heading"><div><small>DOCUMENT</small><h2>문서 필드</h2></div><span>배치된 필드 관리</span></div>
+        <div class="outline-tools"><label><span>⌕</span><input id="fieldSearch" placeholder="필드명 또는 데이터 키" /></label><button id="collapseAll">⌃</button></div>
+        <div class="page-node"><span>▾</span><b>1페이지</b><em id="fieldCount">0</em></div>
+        <div id="fieldTree" class="field-tree"></div>
+      </section>
+
+      <div class="left-footer"><button id="uploadPdfBtn">↑ PDF 교체</button><input id="pdfInput" type="file" accept="application/pdf" hidden><span>시설_이용_신청서.pdf</span></div>
+    </aside>
+
+    <section class="canvas-stage" id="canvasStage">
+      <div class="canvas-meta"><span>A4 · 210 × 297 mm</span><span><i class="legend confirmed"></i> 확정 <i class="legend suggested"></i> AI 추천 <i class="legend repeated"></i> 반복행</span></div>
+      <div class="editor-upload-empty" id="editorUploadEmpty" hidden>
+        <button class="editor-upload-dropzone" id="editorUploadDropzone" type="button">
+          <span class="editor-upload-icon">PDF</span><small>NEW FORM</small>
+          <h2>빈 양식 PDF를 업로드하세요</h2>
+          <p>파일을 이곳에 끌어 놓거나 버튼을 눌러 선택하세요.</p>
+          <b>PDF 파일 선택</b><em>PDF · 최대 20MB</em>
+        </button>
+      </div>
+      <div class="paper-scale" id="paperScale">
+        <div class="form-paper" id="formPaper">
+          <embed class="editor-pdf-preview" id="editorPdfPreview" type="application/pdf" hidden>
+          <div class="paper-caption"><span>지역 커뮤니티 시설</span><span>양식 01</span></div>
+          <h1 class="facility-title">시설 이용 신청서</h1>
+          <p class="facility-lead">아래와 같이 시설 이용을 신청합니다.</p>
+          <div class="facility-date">신청일　＿＿＿＿년＿＿월＿＿일</div>
+          <section class="paper-section"><h3>신청자 정보</h3><div class="paper-form-grid"><b>성명</b><span></span><b>전화번호</b><span></span><b>단체명</b><span></span><b>이용 인원</b><span>　　　　　명</span></div></section>
+          <section class="paper-section"><h3>이용 내용</h3><div class="paper-form-grid"><b>이용일</b><span></span><b>이용 시간</b><span></span><b>이용 시설</b><span class="wide">□ 회의실　□ 다목적실　□ 연수실</span><b>이용 목적</b><span class="wide purpose-lines"></span></div></section>
+          <section class="paper-section terms"><h3>확인 사항</h3><p>□ 이용 규약 및 시설 이용 주의사항에 동의합니다.</p><p>□ 이용 후 원상 복구하며, 시설 파손이 발생한 경우 즉시 알립니다.</p></section>
+          <div class="signature-line"><span>신청자 서명</span><b></b><span>시설 담당자</span><b></b></div>
+          <div class="office-box"><strong>시설 기재란</strong><span>접수번호</span><i></i><span>승인</span><i></i></div>
+          <div class="drop-hint" id="dropHint">여기에 필드를 놓으세요</div>
+          <div class="field-layer" id="fieldLayer"></div>
+        </div>
+      </div>
+      <div class="canvas-status"><span id="selectionStatus">선택 없음</span><span>Shift + 클릭으로 다중 선택 · 방향키로 이동</span></div>
+    </section>
+
+    <aside class="right-sidebar">
+      <div class="settings-tabs"><button class="active" data-settings-tab="field">필드 설정</button></div>
+      <div id="fieldSettingsPane">
+      <div class="empty-state" id="emptyState"><span>↖</span><h3>필드를 선택하세요</h3><p>문서 또는 왼쪽 목록에서 필드를 선택하면 설정을 편집할 수 있습니다.</p></div>
+      <div class="properties" id="properties" hidden>
+        <div class="property-heading"><div><small>FIELD</small><h2 id="propertyTitle">필드 설정</h2></div><span class="type-chip" id="typeChip">Text</span></div>
+
+        <section class="property-section open">
+          <button class="property-section-title">기본 정보 <span>⌃</span></button>
+          <div class="property-body">
+            <label>필드명<input id="propLabel" /></label>
+            <label>데이터 키<div class="key-input"><input id="propKey"/><span id="keyState">사용 가능</span></div></label>
+            <label>데이터 유형<select id="propType"><option value="text">텍스트</option><option value="number">숫자</option><option value="date">날짜</option><option value="time">시간</option><option value="check">체크 판정</option><option value="choice">선택</option></select></label>
+            <label class="toggle-row"><span><b>필수 필드</b><small>빈 값이면 검수 대상으로 표시</small></span><input id="propRequired" type="checkbox" class="switch" /></label>
+          </div>
+        </section>
+
+        <section class="property-section open" id="textSettings">
+          <button class="property-section-title">텍스트 설정 <span>⌃</span></button>
+          <div class="property-body">
+            <label>작성 형태<div class="segmented" id="lineMode"><button class="active" data-value="single">한 줄</button><button data-value="multi">여러 줄</button></div></label>
+          </div>
+        </section>
+
+        <section class="property-section open" id="numberSettings" hidden>
+          <button class="property-section-title">숫자 설정 <span>⌃</span></button>
+          <div class="property-body">
+            <label>숫자 형식<select id="numberFormat"><option value="integer">정수</option><option value="decimal">소수</option></select></label>
+            <label id="decimalPlacesRow" hidden>소수 자릿수<select id="decimalPlaces"><option value="1">1자리</option><option value="2">2자리</option><option value="3">3자리</option></select></label>
+            <label class="toggle-row"><span><b>음수 허용</b><small>온도·증감량처럼 음수가 필요한 경우</small></span><input id="allowNegative" type="checkbox" class="switch" /></label>
+            <label>단위<input id="numberUnit" placeholder="예: 명, kg, ℃"></label>
+            <div class="validation-block"><b>값 범위 검증 <em>선택사항</em></b><small>OCR 결과를 제한하지 않고 범위를 벗어난 값만 검수 대상으로 표시합니다.</small><div class="two-input"><label>최소값<input id="numberMin" type="number" placeholder="설정 안 함"></label><label>최대값<input id="numberMax" type="number" placeholder="설정 안 함"></label></div></div>
+          </div>
+        </section>
+
+        <section class="property-section open" id="checkSettings" hidden>
+          <button class="property-section-title">체크 판정 규칙 <span>⌃</span></button>
+          <div class="property-body">
+            <label>판정 방식<select><option>true / false 기호</option><option>체크 유무</option></select></label>
+            <label>true 표시<div class="mark-picker" id="trueMarks"><button class="selected">✓</button><button class="selected">V</button><button>●</button><button>／</button></div></label>
+            <label>false 표시<div class="mark-picker" id="falseMarks"><button class="selected">X</button><button>×</button></div></label>
+            <label>빈칸 처리<select id="blankPolicy"><option value="null">미입력(null)</option><option value="false">false</option><option value="error">필수 오류</option></select></label>
+            <div class="rule-preview"><span>V</span><b>true</b><span>X</span><b>false</b><span>—</span><b>null</b></div>
+          </div>
+        </section>
+
+        <section class="property-section open" id="dateSettings" hidden>
+          <button class="property-section-title">날짜 설정 <span>⌃</span></button>
+          <div class="property-body">
+            <label>필기 입력 형식<select id="dateInputFormat"><option value="auto">자동 판별</option><option value="slash">YYYY/MM/DD</option><option value="dash">YYYY-MM-DD</option><option value="jp">YYYY年MM月DD日</option><option value="short">MM/DD</option></select></label>
+            <div class="format-example">입력 예: 2026/08/18 · 2026年8月18日 · 8/18</div>
+            <label>연도 생략 시<select id="dateMissingYear"><option value="written">문서 작성 연도 사용</option><option value="current">현재 연도 사용</option><option value="review">검수 필요</option></select></label>
+            <label>데이터 출력 형식<select id="dateOutputFormat"><option value="iso">YYYY-MM-DD (권장)</option><option value="source">필기 원문 유지</option></select></label>
+          </div>
+        </section>
+
+        <section class="property-section open" id="timeSettings" hidden>
+          <button class="property-section-title">시간 설정 <span>⌃</span></button>
+          <div class="property-body">
+            <label>필기 입력 방식<select id="timeInputFormat"><option value="auto">자동 판별</option><option value="24h">24시간제</option><option value="12h">오전·오후 12시간제</option><option value="split">시·분 분리 기입</option></select></label>
+            <div class="format-example">입력 예: 09:30 · 오후 1시 · 13時30分</div>
+            <label>허용 분 단위<select id="minuteStep"><option value="free">자유 입력</option><option value="5">5분 단위</option><option value="10">10분 단위</option><option value="30">30분 단위</option></select></label>
+            <label>데이터 출력 형식<select id="timeOutputFormat"><option value="hhmm">HH:mm (권장)</option><option value="source">필기 원문 유지</option></select></label>
+          </div>
+        </section>
+
+        <section class="property-section open" id="choiceSettings" hidden>
+          <button class="property-section-title">선택 항목 <span>⌃</span></button>
+          <div class="property-body">
+            <div class="choice-help"><b>옵션별 판정 영역</b><small>표시명과 저장값을 지정한 후 문서의 체크박스 영역을 연결하세요.</small></div>
+            <label>선택 방식<div class="segmented choice-mode" id="choiceMode"><button class="active" data-value="single">단일 선택</button><button data-value="multiple">다중 선택</button></div></label>
+            <div id="choiceOptionsList" class="choice-options-list"></div>
+            <button class="add-choice-option" id="addChoiceOption">＋ 선택 항목 추가</button>
+            <label id="choiceConflictRow">두 개 이상 표시된 경우<select id="choiceConflict"><option value="review">검수 필요</option><option value="last">마지막 필기 선택</option><option value="first">첫 번째 필기 선택</option></select></label>
+            <label id="multiCsvRow" hidden>다중 선택 CSV 출력<select id="multiCsvMode"><option value="delimiter">| 구분자로 한 열에 출력</option><option value="columns">옵션별 true/false 열</option><option value="json">JSON 배열 문자열</option></select></label>
+            <small class="setting-hint" id="choiceModeHint">단일 선택 결과는 상위 데이터 키에 옵션 저장값 하나로 저장됩니다.</small>
+          </div>
+        </section>
+
+        <section class="property-section field-layout-section">
+          <button class="property-section-title">위치 및 크기 <span>⌃</span></button>
+          <div class="property-body field-layout-grid">
+            <label><span>Top</span><input id="fieldTop" type="number" min="0" max="990"></label>
+            <label><span>Left</span><input id="fieldLeft" type="number" min="0" max="700"></label>
+            <label><span>Width</span><input id="fieldWidth" type="number" min="28" max="700"></label>
+            <label><span>Height</span><input id="fieldHeight" type="number" min="20" max="990"></label>
+            <small>문서 위 필드를 드래그하거나 숫자를 입력해 미세 조정할 수 있습니다.</small>
+          </div>
+        </section>
+
+        <div class="property-actions"><button id="duplicateBtn">⧉ 복사</button><button id="groupBtn">↻ 반복행으로 묶기</button><button class="danger" id="deleteBtn">삭제</button></div>
+      </div>
+      </div>
+    </aside>
+  </main>
+
+  <div class="dialog-backdrop" id="dataImportDialog" hidden>
+    <div class="dialog-card import-card">
+      <div class="dialog-title"><span class="import-icon">⌁</span><div><small>SMARTPEN IMPORT</small><h2>스마트펜 데이터 가져오기</h2></div><button id="closeDataImport">×</button></div>
+      <p>USB로 연결된 스마트펜의 필기 데이터를 문서 조회 목록으로 가져옵니다.</p>
+      <div class="pen-import-grid"><section><div class="import-section-title"><b>연결된 펜</b><span>1개</span></div><button class="connected-pen active"><i></i><span><b>NWP-F151</b><small>MAC · 9C:7B:D2:18:42:A1</small></span><em>배터리 82%</em></button><div class="pen-summary"><b>저장된 필기</b><span>시설 이용 신청서 · 3페이지</span><small>마지막 작성 2026.08.18 14:32</small></div></section><section class="pen-source-section"><div class="import-section-title"><b>필기 원본</b><span id="selectedPenPageLabel">선택 페이지 1 / 3</span></div><div class="pen-source-preview"><img id="selectedPenPageImage" src="assets/facility-application-handwritten.png" alt="스마트펜 필기 원본 1페이지"><em>Page 1</em></div><div class="pen-page-thumbnails"><button class="active" data-pen-page="1"><img src="assets/facility-application-handwritten.png" alt="1페이지 썸네일"><span>1</span></button><button data-pen-page="2"><img src="assets/facility-application-handwritten.png" alt="2페이지 썸네일"><span>2</span></button><button data-pen-page="3"><img src="assets/facility-application-handwritten.png" alt="3페이지 썸네일"><span>3</span></button></div></section></div>
+      <div class="import-notice"><b>가져오기 방식</b><span><strong>전체 페이지 가져오기</strong>는 펜에 저장된 모든 페이지를 한 번에 등록합니다.</span><span><strong>선택한 페이지 가져오기</strong>는 현재 미리보기에서 선택한 페이지 한 장만 등록합니다.</span></div>
+      <div class="dialog-actions"><button class="button subtle" id="importOnePage">선택한 페이지 가져오기</button><button class="button primary" id="importAllPages">전체 페이지 가져오기</button></div>
+    </div>
+  </div>
+
+  <div class="dialog-backdrop" id="repeatDialog" hidden>
+    <div class="dialog-card">
+      <div class="dialog-title"><span class="repeat-icon">↻</span><div><small>REPEATING GROUP</small><h2>반복행으로 묶기</h2></div><button class="close-dialog">×</button></div>
+      <p>선택한 필드를 한 행의 열 스키마로 사용합니다. 화면에는 여러 행이 보이지만 필드 정의는 한 번만 저장됩니다.</p>
+      <div class="repeat-steps"><span class="done"><b>1</b> 첫 행 필드</span><i></i><span class="active"><b>2</b> 반복 규칙</span><i></i><span><b>3</b> 배열 생성</span></div>
+      <label>그룹명<input id="repeatLabel" value="검사 내역"></label>
+      <label>그룹 데이터 키<input id="repeatKey" value="inspection_rows"></label>
+      <div class="repeat-row-detect">
+        <div><small>기준행 크기 자동 적용</small><b id="repeatRowStatus">선택한 첫 번째 행을 기준으로 반복합니다</b><span id="repeatRowValue">행 높이를 계산하고 있습니다</span></div>
+        <input id="repeatRowHeight" type="number" value="31" min="16" max="100" hidden>
+      </div>
+      <label>최대 행 수<input id="repeatRows" type="number" value="25" min="1" max="50"></label>
+      <label>빈 행 처리<select id="repeatBlank"><option value="exclude">데이터에서 제외</option><option value="include">빈 값으로 포함</option></select></label>
+      <div class="repeat-range-preview"><span>기준행 01</span><b>× <em id="repeatCountPreview">25</em>행</b><span>마지막행 25</span></div>
+      <div class="selected-columns" id="selectedColumns"></div>
+      <div class="repeat-json-preview"><small>생성될 데이터 구조</small><code>inspection_rows[] → { <span id="repeatKeysPreview"></span> }</code></div>
+      <div class="dialog-actions"><button class="button subtle close-dialog">취소</button><button class="button primary" id="confirmRepeat">반복행 생성</button></div>
+    </div>
+  </div>
+
+  <div class="dialog-backdrop" id="outputDialog" hidden>
+    <div class="dialog-card test-card">
+      <div class="dialog-title"><div><small id="detailEyebrow">DOCUMENT DETAIL</small><h2 id="detailTitle">시설 이용 신청서</h2></div><span class="test-badge" id="detailStatusBadge">작성</span><div class="detail-top-actions"><button class="button subtle" id="runOcrBtn">✦ AI OCR 실행</button><button class="button subtle" id="jsonPreviewBtn">JSON</button><button class="button subtle" id="downloadCsvBtn">CSV</button><button class="button subtle" id="downloadExcelBtn">Excel</button><button class="button primary" id="finalizeDocumentBtn">최종 확정</button></div><button class="close-output">×</button></div>
+      <div class="test-flow"><span class="done">1 필드 정의</span><i></i><span class="active">2 OCR 결과 검수</span><i></i><span>3 CSV 출력</span></div>
+      <div class="test-layout">
+        <section class="test-source-panel">
+          <div class="test-section-head"><div><b>작성 원본</b><small id="testSourceName">손필기 완료 샘플 · 1페이지</small></div><div class="source-actions"><button id="sourceZoomOut">−</button><b id="sourceZoomLabel">55%</b><button id="sourceZoomIn">＋</button><button id="testSourceUpload">↑ 원본 업로드</button><input id="testSourceInput" type="file" accept="image/png,image/jpeg,application/pdf" hidden></div></div>
+          <div class="test-source-viewport" id="testSourceViewport"><div id="testSourceCanvas"></div></div>
+          <div class="source-guide"><span><i></i> 오른쪽 필드값을 누르면 원본 위치가 표시됩니다.</span><em>JPG · PNG · 단일 페이지 PDF</em></div>
+        </section>
+        <div class="test-data-column">
+          <section class="test-values"><div class="test-section-head"><div><b>인식된 필드값</b><small>OCR 결과를 확인·수정한 후 최종 확정합니다.</small></div><button id="rerunOcrBtn">↻ OCR 다시 실행</button></div><div class="review-summary"><div id="reviewCounts"></div><div class="review-filters" id="reviewFilters"><button class="active" data-review-filter="all">전체</button><button data-review-filter="review">확인 필요</button><button data-review-filter="missing">미입력·오류</button></div></div><div id="testFieldList" class="test-field-list"></div></section>
+          <section class="csv-panel"><div class="test-section-head"><div><b>CSV 자동 생성</b><small>데이터 키가 열 이름으로 사용됩니다.</small></div><span id="csvFieldCount"></span></div><div class="csv-table-wrap"><table id="csvPreviewTable"></table></div><pre id="outputCode"></pre><div class="csv-note"><span>✓ UTF-8 BOM</span><span>✓ 일본어 지원</span><span>✓ 확정값 기준</span></div></section>
+        </div>
+      </div>
+      <div class="dialog-actions"><button class="button subtle close-output">이전 화면으로</button><span class="detail-action-note" id="detailActionNote">값을 확인한 뒤 최종 확정해 주세요.</span></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js?v=20260819-first-row-repeat"></script>
+</body>
+</html>
