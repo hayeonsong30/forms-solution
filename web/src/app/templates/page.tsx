@@ -142,7 +142,10 @@ export default function TemplatesPage() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-400">
             <tr>
-              <th className="px-4 py-2.5 font-medium">양식명</th>
+              <th className="px-4 py-2.5 font-medium w-10">NO</th>
+              <th className="px-4 py-2.5 font-medium">ID</th>
+              <th className="px-4 py-2.5 font-medium">Name</th>
+              <th className="px-4 py-2.5 font-medium">Owner</th>
               <th className="px-4 py-2.5 font-medium">페이지</th>
               <th className="px-4 py-2.5 font-medium">필드</th>
               <th className="px-4 py-2.5 font-medium">프린트 상태</th>
@@ -152,7 +155,7 @@ export default function TemplatesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
-            {filtered.map((t) => (
+            {filtered.map((t, idx) => (
               <tr
                 key={t.id}
                 tabIndex={0}
@@ -165,10 +168,10 @@ export default function TemplatesPage() {
                 }}
                 className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50 outline-none"
               >
-                <td className="px-4 py-3">
-                  <div className="font-medium">{t.name}</div>
-                  <div className="text-xs text-slate-400 font-mono">{t.id.slice(0, 8)}</div>
-                </td>
+                <td className="px-4 py-3 text-slate-400">{idx + 1}</td>
+                <td className="px-4 py-3 text-slate-400 font-mono text-xs">{t.id.slice(0, 8)}</td>
+                <td className="px-4 py-3 font-medium">{t.name}</td>
+                <td className="px-4 py-3 text-slate-500">{t.org.name}</td>
                 <td className="px-4 py-3 text-slate-500">{t.pageCount}</td>
                 <td className="px-4 py-3 text-slate-500">{t.fieldCount}</td>
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
