@@ -127,6 +127,16 @@ export const importDocumentSchema = z.object({
   pageImages: z.array(z.string()).min(1),
 });
 
+export const aiDetectionSchema = z.object({
+  imageDataUri: z.string().startsWith("data:"),
+  pageNo: z.number().int().min(1).default(1),
+});
+
+export const applyAiCandidatesSchema = z.object({
+  acceptFieldIds: z.array(z.string()).default([]),
+  rejectFieldIds: z.array(z.string()).default([]),
+});
+
 export const updateFieldValueSchema = z.object({
   finalValue: z.string().nullable(),
 });

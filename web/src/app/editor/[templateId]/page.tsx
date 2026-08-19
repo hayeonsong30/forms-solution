@@ -29,6 +29,7 @@ export default function EditorPage({
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [multiSelectIds, setMultiSelectIds] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [tool, setTool] = useState<Tool>({ mode: "select" });
   const [issues, setIssues] = useState<FieldIssue[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -203,6 +204,48 @@ export default function EditorPage({
     }
   }
 
+  async function runAiDetection(dataUri: string) {
+    setActionError(null);
+    setAiBusy(true);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/ai-detection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageDataUri: dataUri, pageNo: 1 }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setActionError(json.message ?? "AI 자동 추천 실패");
+        return;
+      }
+      await load();
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function handleAiFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => runAiDetection(reader.result as string);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  async function acceptSuggested(field: FieldDTO) {
+    await saveField(field.id, { status: "confirmed" });
+    await load();
+  }
+
+  async function rejectSuggested(field: FieldDTO) {
+    const res = await fetch(`/api/templates/${templateId}/fields/${field.id}`, { method: "DELETE" });
+    if (res.ok) {
+      if (selectedId === field.id) setSelectedId(null);
+      await load();
+    }
+  }
+
   async function runValidate() {
     const res = await fetch(`/api/templates/${templateId}/validate`, { method: "POST" });
     const json = await res.json();
@@ -307,6 +350,10 @@ export default function EditorPage({
               반복행으로 묶기 ({multiSelectIds.length})
             </button>
           )}
+          <label className="text-sm border border-violet-300 text-violet-700 rounded px-3 py-1 cursor-pointer">
+            {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
+            <input type="file" accept="image/*" className="hidden" onChange={handleAiFile} disabled={aiBusy} />
+          </label>
           <div className="flex-1" />
           <button className="text-sm border rounded px-3 py-1" onClick={runValidate}>
             검사
@@ -541,6 +588,25 @@ export default function EditorPage({
                 />
                 필수 필드
               </label>
+              {selected.status === "suggested" && (
+                <div className="bg-violet-50 border border-violet-200 rounded p-2 space-y-2">
+                  <p className="text-xs text-violet-700">AI가 제안한 필드입니다. 검수 후 채택하거나 거부하세요.</p>
+                  <div className="flex gap-2">
+                    <button
+                      className="text-sm bg-violet-600 text-white rounded px-3 py-1 flex-1"
+                      onClick={() => acceptSuggested(selected)}
+                    >
+                      채택
+                    </button>
+                    <button
+                      className="text-sm border border-violet-300 text-violet-700 rounded px-3 py-1 flex-1"
+                      onClick={() => rejectSuggested(selected)}
+                    >
+                      거부
+                    </button>
+                  </div>
+                </div>
+              )}
             </Section>
 
             <Section title="유형별 설정">

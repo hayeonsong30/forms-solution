@@ -122,7 +122,6 @@ export type DocumentDTO = {
   orgId: string;
   ncode: string | null;
   status: DocumentStatus;
-  pageImages: string[];
   createdAt: string;
   confirmedAt: string | null;
 };
@@ -151,6 +150,7 @@ export type FieldValueDTO = {
 export type DocumentDetailDTO = DocumentDTO & {
   templateVersion: { template: { name: string } };
   fieldValues: FieldValueDTO[];
+  pageImageCount: number;
 };
 
 export type FieldIssue = {

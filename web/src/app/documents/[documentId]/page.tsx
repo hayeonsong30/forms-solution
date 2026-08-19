@@ -18,6 +18,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
   const [actionError, setActionError] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState("");
   const [showReopen, setShowReopen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/documents/${documentId}`);
@@ -31,21 +32,34 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
 
   async function runAction(path: string, body?: Record<string, unknown>) {
     setActionError(null);
-    const res = await fetch(`/api/documents/${documentId}/${path}`, {
-      method: "POST",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setActionError(describeError(json));
-      return;
+    setBusy(path);
+    try {
+      const res = await fetch(`/api/documents/${documentId}/${path}`, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setActionError(describeError(json));
+        return;
+      }
+      await load();
+    } finally {
+      setBusy(null);
     }
-    await load();
   }
 
-  async function importStub() {
-    await runAction("import", { pageImages: [`stub://${documentId}/page1.png`] });
+  function importFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUri = reader.result as string;
+      runAction("import", { pageImages: [dataUri] });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
   }
 
   async function saveFinalValue(fieldValueId: string, finalValue: string) {
@@ -70,19 +84,28 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
 
       {actionError && <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-sm text-red-700">{actionError}</div>}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         {doc.status === "printed" && (
-          <button className="text-sm bg-blue-600 text-white rounded px-3 py-1" onClick={importStub}>
-            필기 업로드 (스텁 — SDK 연동 전)
-          </button>
+          <label className="text-sm bg-blue-600 text-white rounded px-3 py-1 cursor-pointer">
+            필기 이미지 업로드 (SDK 연동 전 — 파일 직접 선택)
+            <input type="file" accept="image/*" className="hidden" onChange={importFile} disabled={busy !== null} />
+          </label>
         )}
         {(doc.status === "received" || doc.status === "error") && (
-          <button className="text-sm bg-blue-600 text-white rounded px-3 py-1" onClick={() => runAction("process")}>
-            처리 실행 (스텁 — Phase 4에서 실제 AI OCR로 교체)
+          <button
+            className="text-sm bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
+            onClick={() => runAction("process")}
+            disabled={busy !== null}
+          >
+            {busy === "process" ? "AI 처리 중… (최대 2분)" : "처리 실행 (Gemini OCR)"}
           </button>
         )}
         {doc.status === "review_required" && (
-          <button className="text-sm bg-blue-600 text-white rounded px-3 py-1" onClick={() => runAction("confirm")}>
+          <button
+            className="text-sm bg-blue-600 text-white rounded px-3 py-1 disabled:opacity-50"
+            onClick={() => runAction("confirm")}
+            disabled={busy !== null}
+          >
             확정
           </button>
         )}
@@ -91,6 +114,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
             재검수 열기
           </button>
         )}
+        {busy === "import" && <span className="text-xs text-gray-500">업로드 중…</span>}
       </div>
 
       {showReopen && (
