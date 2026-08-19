@@ -626,7 +626,10 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
                     f.hidden ? null : (
                       <div
                         key={f.id}
-                        onClick={(e) => selectField(f.id, e.shiftKey)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          selectField(f.id, e.shiftKey);
+                        }}
                         onPointerDown={(e) => startDrag(f, e, "move")}
                         className={`absolute border-2 text-[10px] px-1 overflow-hidden select-none ${
                           multiSelectIds.includes(f.id)
@@ -648,7 +651,10 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
                         {f.label}
                         {f.id === selectedId && !f.locked && (
                           <div
-                            onPointerDown={(e) => startDrag(f, e, "resize")}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              startDrag(f, e, "resize");
+                            }}
                             className="absolute -right-1 -bottom-1 w-3 h-3 bg-[var(--color-brand-600)] cursor-se-resize"
                           />
                         )}
