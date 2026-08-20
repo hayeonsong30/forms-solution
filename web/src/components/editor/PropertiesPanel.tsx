@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
+import { useEffect, useState } from "react";
+import type { ChoiceOptionDTO, FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
 import {
   CheckConfigPanel,
   ChoiceConfigPanel,
@@ -15,6 +15,8 @@ import {
   TimeConfigPanel,
 } from "./configPanels";
 
+export type ChoiceOptionInput = { label: string; storedValue: string; region: { x: number; y: number; w: number; h: number } | null };
+
 export function FieldPropertiesPanel({
   field,
   otherCheckFields,
@@ -25,6 +27,9 @@ export function FieldPropertiesPanel({
   onAccept,
   onReject,
   onDelete,
+  onSaveChoiceOptions,
+  onArmOptionRegion,
+  armedOptionIndex,
 }: {
   field: FieldDTO;
   otherCheckFields: FieldDTO[];
@@ -38,9 +43,10 @@ export function FieldPropertiesPanel({
   onAccept: () => void;
   onReject: () => void;
   onDelete: () => void;
+  onSaveChoiceOptions: (options: ChoiceOptionInput[]) => void;
+  onArmOptionRegion: (optionIndex: number | null) => void;
+  armedOptionIndex: number | null;
 }) {
-  const [showPosition, setShowPosition] = useState(false);
-
   return (
     <div className="divide-y">
       <Section title="기본 정보">
@@ -119,7 +125,19 @@ export function FieldPropertiesPanel({
         {field.type === "choice" && <ChoiceConfigPanel value={field.config.choice} onChange={(patch) => onPatchConfig("choice", patch)} />}
       </Section>
 
-      <Section title="위치·크기" collapsible collapsed={!showPosition} onToggle={() => setShowPosition((v) => !v)}>
+      {field.type === "choice" && (
+        <Section title="선택 옵션">
+          <ChoiceOptionsPanel
+            fieldId={field.id}
+            options={field.choiceOptions}
+            onSave={onSaveChoiceOptions}
+            onArmRegion={onArmOptionRegion}
+            armedIndex={armedOptionIndex}
+          />
+        </Section>
+      )}
+
+      <Section title="위치·크기">
         <div className="grid grid-cols-2 gap-2">
           <PercentField label="X" value={field.boxX} onCommit={(v) => onSave({ box: { x: v, y: field.boxY, w: field.boxW, h: field.boxH } })} />
           <PercentField label="Y" value={field.boxY} onCommit={(v) => onSave({ box: { x: field.boxX, y: v, w: field.boxW, h: field.boxH } })} />
@@ -176,6 +194,91 @@ export function FieldPropertiesPanel({
       </div>
     </div>
   );
+}
+
+// PRD_양식편집기_상세 §14.1 "선택 옵션별 판정 영역": 옵션마다 표시명·저장값·독립 좌표를 갖는다.
+function ChoiceOptionsPanel({
+  fieldId,
+  options,
+  onSave,
+  onArmRegion,
+  armedIndex,
+}: {
+  fieldId: string;
+  options: ChoiceOptionDTO[];
+  onSave: (options: ChoiceOptionInput[]) => void;
+  onArmRegion: (optionIndex: number | null) => void;
+  armedIndex: number | null;
+}) {
+  const [local, setLocal] = useState<ChoiceOptionInput[]>(() => toInput(options));
+
+  // 선택된 필드가 바뀌면(다른 choice 필드를 클릭) 로컬 편집 상태를 그 필드 기준으로 되돌린다.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- field switch resets the local draft
+  useEffect(() => setLocal(toInput(options)), [fieldId, options]);
+
+  function commit(next: ChoiceOptionInput[]) {
+    setLocal(next);
+    onSave(next);
+  }
+
+  return (
+    <div className="space-y-2">
+      {local.map((o, i) => (
+        <div key={i} className="border border-[var(--color-border)] rounded-lg p-2 space-y-1.5">
+          <div className="flex gap-1.5">
+            <input
+              className={`${inputClass} flex-1`}
+              placeholder="표시명"
+              value={o.label}
+              onChange={(e) => setLocal((prev) => prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)))}
+              onBlur={() => commit(local)}
+            />
+            <input
+              className={`${inputClass} flex-1`}
+              placeholder="저장값"
+              value={o.storedValue}
+              onChange={(e) => setLocal((prev) => prev.map((x, xi) => (xi === i ? { ...x, storedValue: e.target.value } : x)))}
+              onBlur={() => commit(local)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className={`text-xs rounded px-2 py-1 border cursor-pointer ${
+                armedIndex === i ? "border-[var(--color-brand-600)] text-[var(--color-brand-600)] bg-[var(--color-brand-50)]" : "border-[var(--color-border)]"
+              }`}
+              onClick={() => onArmRegion(armedIndex === i ? null : i)}
+            >
+              {armedIndex === i ? "캔버스에서 드래그…" : o.region ? "영역 다시 지정" : "+ 영역 지정"}
+            </button>
+            <span className="text-[11px] text-slate-400">{o.region ? "영역 지정됨" : "영역 미지정"}</span>
+            <button
+              className="text-xs text-red-600 ml-auto cursor-pointer"
+              onClick={() => commit(local.filter((_, xi) => xi !== i))}
+            >
+              삭제
+            </button>
+          </div>
+        </div>
+      ))}
+      <button
+        className="text-sm border border-dashed border-[var(--color-border)] rounded-lg px-3 py-1.5 w-full text-slate-500 cursor-pointer"
+        onClick={() => commit([...local, { label: `옵션 ${local.length + 1}`, storedValue: `option_${local.length + 1}`, region: null }])}
+      >
+        + 옵션 추가
+      </button>
+    </div>
+  );
+}
+
+function toInput(options: ChoiceOptionDTO[]): ChoiceOptionInput[] {
+  return options.map((o) => ({
+    label: o.label,
+    storedValue: o.storedValue,
+    region:
+      o.regionX !== null && o.regionY !== null && o.regionW !== null && o.regionH !== null
+        ? { x: o.regionX, y: o.regionY, w: o.regionW, h: o.regionH }
+        : null,
+  }));
 }
 
 export function GroupPropertiesPanel({

@@ -22,7 +22,6 @@ export async function GET() {
         orgId: t.orgId,
         name: t.name,
         status: t.status,
-        printable: t.printable,
         printableReason: t.printableReason,
         currentVersionId: t.currentVersionId,
         createdAt: t.createdAt,

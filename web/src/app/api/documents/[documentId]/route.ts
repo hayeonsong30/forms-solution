@@ -5,9 +5,19 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/documents/[docu
   const document = await prisma.document.findUnique({
     where: { id: documentId },
     include: {
-      templateVersion: { include: { template: { select: { name: true } } } },
+      templateVersion: {
+        include: {
+          template: { select: { id: true, name: true } },
+          // 아직 필기 데이터가 없어 fieldValues가 비어 있어도(예: printed 상태) 문서 상세
+          // 화면이 완전히 빈 화면이 되지 않도록, 어떤 필드가 잡혀 있는지 구조를 같이 보낸다.
+          fields: {
+            orderBy: [{ pageNo: "asc" }, { boxY: "asc" }, { boxX: "asc" }],
+            include: { choiceOptions: { orderBy: { orderNo: "asc" } } },
+          },
+        },
+      },
       fieldValues: {
-        include: { field: true, repeatColumn: true },
+        include: { field: { include: { choiceOptions: { orderBy: { orderNo: "asc" } } } }, repeatColumn: true },
         orderBy: [{ rowIndex: "asc" }],
       },
     },

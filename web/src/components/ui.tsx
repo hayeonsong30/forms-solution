@@ -79,9 +79,9 @@ export function Badge({ tone = "slate", children }: { tone?: keyof typeof BADGE_
 
 export function PageHeader({ title, actions }: { title: string; actions?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between mb-6">
-      <h1 className="text-lg font-semibold text-[var(--foreground)]">{title}</h1>
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <h1 className="text-lg font-semibold text-[var(--foreground)] shrink-0">{title}</h1>
+      {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
     </div>
   );
 }

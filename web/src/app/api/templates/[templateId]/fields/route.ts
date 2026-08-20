@@ -22,7 +22,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
     }
 
     const existingKeys = await existingDataKeys(version.id);
-    const base = parsed.data.dataKey ? slugifyDataKey(parsed.data.dataKey) : slugifyDataKey(parsed.data.label);
+    const base = slugifyDataKey(parsed.data.dataKey ?? parsed.data.label, parsed.data.type);
     const dataKey = withUniqueSuffix(base, existingKeys);
 
     const field = await prisma.field.create({
@@ -42,6 +42,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
         status: "confirmed",
         config: defaultConfigForType(parsed.data.type, parsed.data.config) as Prisma.InputJsonValue,
       },
+      include: { choiceOptions: true },
     });
 
     return Response.json(field, { status: 201 });

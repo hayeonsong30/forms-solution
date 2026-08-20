@@ -11,8 +11,10 @@ export async function GET() {
       ncode: true,
       status: true,
       createdAt: true,
+      receivedAt: true,
       confirmedAt: true,
-      templateVersion: { select: { pageCount: true, template: { select: { name: true } } } },
+      templateVersion: { select: { pageCount: true, template: { select: { id: true, name: true } } } },
+      org: { select: { name: true } },
     },
   });
 

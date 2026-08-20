@@ -18,6 +18,11 @@ export function validateFieldValue(input: {
   type: FieldType;
   required: boolean;
   config: FieldConfig;
+  // choice 유형의 유효 저장값 목록 (ChoiceOption.storedValue). 관계형 테이블이 없는
+  // 반복행 열처럼 목록을 알 수 없을 때는 생략 — 이 경우 값 검사를 건너뛴다.
+  choiceOptions?: string[];
+  // date 유형의 missingYearPolicy가 "document_year"일 때 채울 연도 (문서 생성 연도).
+  documentYear?: number;
   finalValue: string | null;
 }): { normalizedValue: string | null; reviewReasons: ReviewReason[] } {
   const { type, required, config, finalValue } = input;
@@ -30,7 +35,7 @@ export function validateFieldValue(input: {
   }
   if (isEmpty) return { normalizedValue: null, reviewReasons: [] };
 
-  const normalized = normalizeValue(type, finalValue);
+  let normalized = normalizeValue(type, finalValue, config, input.documentYear);
 
   if (type === "number") {
     const cfg = (config.number ?? {}) as NumberConfig;
@@ -50,12 +55,22 @@ export function validateFieldValue(input: {
     if (normalized === null) reasons.push("invalid_time");
   } else if (type === "choice") {
     const cfg = (config.choice ?? {}) as ChoiceConfig;
+    const validValues = input.choiceOptions ?? [];
     const selected = finalValue.split(",").map((s) => s.trim()).filter(Boolean);
-    if (cfg.options && cfg.options.length > 0 && selected.some((s) => !cfg.options.includes(s))) {
+    if (validValues.length > 0 && selected.some((s) => !validValues.includes(s))) {
       reasons.push("unknown_choice");
     }
+    // 단일 선택인데 표시된 옵션이 여러 개면 conflictPolicy에 따라 처리한다 (PRD §14.1).
+    // "확인 필요" 정책은 값을 지우지 않고 원값을 보존하되 검수 사유만 남긴다(§4.1 원칙과 동일).
     if (cfg.mode === "single" && selected.length > 1) {
-      reasons.push("unknown_choice");
+      const policy = cfg.conflictPolicy ?? "review_required";
+      if (policy === "last_marked") {
+        normalized = selected[selected.length - 1];
+      } else if (policy === "first_marked") {
+        normalized = selected[0];
+      } else {
+        reasons.push("choice_conflict");
+      }
     }
   } else {
     // 텍스트는 문자 정책 위반이어도 값을 지우지 않고 원값을 보존한다 (PRD §4.1).

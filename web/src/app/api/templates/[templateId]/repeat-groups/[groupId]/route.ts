@@ -28,7 +28,7 @@ export async function PATCH(
 
   let nextDataKey: string | undefined;
   if (dataKey) {
-    const base = slugifyDataKey(dataKey);
+    const base = slugifyDataKey(dataKey, "rows");
     if (base !== current.dataKey) {
       const [fieldKeys, groupKeys] = await Promise.all([
         prisma.field.findMany({ where: { templateVersionId: current.templateVersionId }, select: { dataKey: true } }),

@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/documents/[docu
   const result = await smartpenImportProvider.importHandwriting(documentId, parsed.data);
   const updated = await prisma.document.update({
     where: { id: documentId },
-    data: { status: "received", pageImages: result.pageImages as Prisma.InputJsonValue },
+    data: { status: "received", pageImages: result.pageImages as Prisma.InputJsonValue, receivedAt: new Date() },
   });
   return Response.json(updated);
 }

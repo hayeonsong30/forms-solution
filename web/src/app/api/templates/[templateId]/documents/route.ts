@@ -6,7 +6,7 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/templates/[tem
   const { templateId } = await ctx.params;
   const template = await prisma.template.findUnique({ where: { id: templateId } });
   if (!template) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
-  if (!template.printable || !template.currentVersionId) {
+  if (template.status !== "printable" || !template.currentVersionId) {
     return Response.json({ error: "TEMPLATE_NOT_PRINTABLE" }, { status: 409 });
   }
 

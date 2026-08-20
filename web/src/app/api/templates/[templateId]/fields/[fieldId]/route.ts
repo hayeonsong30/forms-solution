@@ -27,11 +27,11 @@ export async function PATCH(
     return Response.json({ error: "FIELD_LOCKED" }, { status: 409 });
   }
 
-  const { box, dataKey, config, type, ...rest } = parsed.data;
+  const { box, dataKey, config, type, choiceOptions, ...rest } = parsed.data;
 
   let nextDataKey: string | undefined;
   if (dataKey) {
-    const base = slugifyDataKey(dataKey);
+    const base = slugifyDataKey(dataKey, type ?? current.type);
     if (base !== current.dataKey) {
       const keys = await existingDataKeys(current.templateVersionId);
       keys.delete(current.dataKey);
@@ -56,15 +56,39 @@ export async function PATCH(
     } as Prisma.InputJsonValue;
   }
 
-  const field = await prisma.field.update({
-    where: { id: fieldId },
-    data: {
-      ...rest,
-      ...(type ? { type } : {}),
-      ...(nextDataKey ? { dataKey: nextDataKey } : {}),
-      ...(box ? { boxX: box.x, boxY: box.y, boxW: box.w, boxH: box.h } : {}),
-      ...(nextConfig ? { config: nextConfig } : {}),
-    },
+  const field = await prisma.$transaction(async (tx) => {
+    const updated = await tx.field.update({
+      where: { id: fieldId },
+      data: {
+        ...rest,
+        ...(type ? { type } : {}),
+        ...(nextDataKey ? { dataKey: nextDataKey } : {}),
+        ...(box ? { boxX: box.x, boxY: box.y, boxW: box.w, boxH: box.h } : {}),
+        ...(nextConfig ? { config: nextConfig } : {}),
+      },
+    });
+    if (choiceOptions) {
+      await tx.choiceOption.deleteMany({ where: { fieldId } });
+      if (choiceOptions.length > 0) {
+        await tx.choiceOption.createMany({
+          data: choiceOptions.map((o, i) => ({
+            fieldId,
+            orderNo: i,
+            label: o.label,
+            storedValue: o.storedValue,
+            regionX: o.region?.x,
+            regionY: o.region?.y,
+            regionW: o.region?.w,
+            regionH: o.region?.h,
+          })),
+        });
+      }
+    }
+    const withOptions = await tx.field.findUnique({
+      where: { id: fieldId },
+      include: { choiceOptions: { orderBy: { orderNo: "asc" } } },
+    });
+    return withOptions ?? updated;
   });
   return Response.json(field);
 }

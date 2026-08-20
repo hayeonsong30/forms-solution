@@ -195,6 +195,52 @@ export function NumberConfigPanel({ value, onChange }: { value?: NumberConfig; o
   );
 }
 
+// PRD_양식편집기_상세 §4.3 허용 true/false 표시 목록.
+const TRUE_MARK_OPTIONS = [
+  { value: "CHECK", icon: "✓", label: "체크" },
+  { value: "V", icon: "V", label: "브이" },
+  { value: "CIRCLE", icon: "●", label: "동그라미" },
+  { value: "FILL", icon: "▪", label: "칸 채움" },
+  { value: "SLASH", icon: "╱", label: "사선" },
+];
+const FALSE_MARK_OPTIONS = [
+  { value: "X", icon: "✕", label: "엑스" },
+  { value: "CROSS", icon: "×", label: "곱하기" },
+];
+
+function MarkToggleGroup({
+  options,
+  selected,
+  onChange,
+}: {
+  options: { value: string; icon: string; label: string }[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  return (
+    <div className="flex gap-1.5 flex-wrap">
+      {options.map((opt) => {
+        const active = selected.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            title={opt.label}
+            onClick={() => onChange(active ? selected.filter((m) => m !== opt.value) : [...selected, opt.value])}
+            className={`w-9 h-9 rounded-lg border text-base leading-none cursor-pointer flex items-center justify-center ${
+              active
+                ? "border-[var(--color-brand-600)] bg-[var(--color-brand-50)] text-[var(--color-brand-700)]"
+                : "border-[var(--color-border)] text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            {opt.icon}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CheckConfigPanel({
   value,
   otherCheckFields,
@@ -217,20 +263,12 @@ export function CheckConfigPanel({
           <option value="symbol_classification">true/false 기호</option>
         </select>
       </Field>
-      <Field label="true 표시 (쉼표 구분)">
-        <input
-          className={inputClass}
-          defaultValue={(v.trueMarks ?? ["CHECK", "V"]).join(", ")}
-          onBlur={(e) => onChange({ trueMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-        />
+      <Field label="true 표시">
+        <MarkToggleGroup options={TRUE_MARK_OPTIONS} selected={v.trueMarks ?? ["CHECK", "V"]} onChange={(trueMarks) => onChange({ trueMarks })} />
       </Field>
       {v.mode === "symbol_classification" && (
-        <Field label="false 표시 (쉼표 구분)">
-          <input
-            className={inputClass}
-            defaultValue={(v.falseMarks ?? ["X"]).join(", ")}
-            onBlur={(e) => onChange({ falseMarks: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-          />
+        <Field label="false 표시">
+          <MarkToggleGroup options={FALSE_MARK_OPTIONS} selected={v.falseMarks ?? ["X"]} onChange={(falseMarks) => onChange({ falseMarks })} />
         </Field>
       )}
       <Field label="빈칸 처리">
@@ -267,13 +305,40 @@ export function DateConfigPanel({ value, onChange }: { value?: DateConfig; onCha
   const v = value ?? ({} as DateConfig);
   return (
     <>
-      <Field label="표시 형식">
-        <input className={inputClass} defaultValue={v.format ?? "YYYY-MM-DD"} onBlur={(e) => onChange({ format: e.target.value })} />
+      <Field label="입력 형식">
+        <select
+          className={inputClass}
+          value={v.inputFormat ?? "auto"}
+          onChange={(e) => onChange({ inputFormat: e.target.value as DateConfig["inputFormat"] })}
+        >
+          <option value="auto">자동 판별</option>
+          <option value="YYYY/MM/DD">YYYY/MM/DD</option>
+          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+          <option value="YYYY년 MM월 DD일">YYYY년 MM월 DD일</option>
+          <option value="MM/DD">MM/DD (연도 생략)</option>
+        </select>
       </Field>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
-        빈칸 허용
-      </label>
+      <Field label="연도 생략 시 처리">
+        <select
+          className={inputClass}
+          value={v.missingYearPolicy ?? "review_required"}
+          onChange={(e) => onChange({ missingYearPolicy: e.target.value as DateConfig["missingYearPolicy"] })}
+        >
+          <option value="review_required">확인 필요로 표시</option>
+          <option value="document_year">문서 작성 연도 사용</option>
+          <option value="current_year">현재 연도 사용</option>
+        </select>
+      </Field>
+      <Field label="출력 형식">
+        <select
+          className={inputClass}
+          value={v.outputFormat ?? "YYYY-MM-DD"}
+          onChange={(e) => onChange({ outputFormat: e.target.value as DateConfig["outputFormat"] })}
+        >
+          <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+          <option value="source">원본 표기 유지</option>
+        </select>
+      </Field>
     </>
   );
 }
@@ -282,13 +347,40 @@ export function TimeConfigPanel({ value, onChange }: { value?: TimeConfig; onCha
   const v = value ?? ({} as TimeConfig);
   return (
     <>
-      <Field label="표시 형식">
-        <input className={inputClass} defaultValue={v.format ?? "HH:mm"} onBlur={(e) => onChange({ format: e.target.value })} />
+      <Field label="입력 형식">
+        <select
+          className={inputClass}
+          value={v.inputMode ?? "auto"}
+          onChange={(e) => onChange({ inputMode: e.target.value as TimeConfig["inputMode"] })}
+        >
+          <option value="auto">자동 판별</option>
+          <option value="24h">24시간제</option>
+          <option value="12h">오전·오후 12시간제</option>
+          <option value="split_hour_minute">시·분 분리 기입</option>
+        </select>
       </Field>
-      <label className="flex items-center gap-2">
-        <input type="checkbox" checked={v.allowBlank ?? true} onChange={(e) => onChange({ allowBlank: e.target.checked })} />
-        빈칸 허용
-      </label>
+      <Field label="분 단위">
+        <select
+          className={inputClass}
+          value={String(v.minuteStep ?? "free")}
+          onChange={(e) => onChange({ minuteStep: (e.target.value === "free" ? "free" : Number(e.target.value)) as TimeConfig["minuteStep"] })}
+        >
+          <option value="free">자유 입력</option>
+          <option value="5">5분 단위</option>
+          <option value="10">10분 단위</option>
+          <option value="30">30분 단위</option>
+        </select>
+      </Field>
+      <Field label="출력 형식">
+        <select
+          className={inputClass}
+          value={v.outputFormat ?? "HH:mm"}
+          onChange={(e) => onChange({ outputFormat: e.target.value as TimeConfig["outputFormat"] })}
+        >
+          <option value="HH:mm">HH:mm</option>
+          <option value="source">원본 표기 유지</option>
+        </select>
+      </Field>
     </>
   );
 }
@@ -303,20 +395,27 @@ export function ChoiceConfigPanel({ value, onChange }: { value?: ChoiceConfig; o
           <option value="multiple">다중 선택</option>
         </select>
       </Field>
-      <Field label="선택지 (줄바꿈으로 구분)">
-        <textarea
+      <Field label="충돌 정책">
+        <select
           className={inputClass}
-          rows={4}
-          defaultValue={(v.options ?? []).join("\n")}
-          onBlur={(e) =>
-            onChange({
-              options: e.target.value
-                .split("\n")
-                .map((s) => s.trim())
-                .filter(Boolean),
-            })
-          }
-        />
+          value={v.conflictPolicy ?? "review_required"}
+          onChange={(e) => onChange({ conflictPolicy: e.target.value as ChoiceConfig["conflictPolicy"] })}
+        >
+          <option value="review_required">두 개 이상 표시되면 확인 필요</option>
+          <option value="last_marked">마지막으로 표시된 값 사용</option>
+          <option value="first_marked">처음 표시된 값 사용</option>
+        </select>
+      </Field>
+      <Field label="CSV 방식">
+        <select
+          className={inputClass}
+          value={v.csvPolicy ?? "delimiter"}
+          onChange={(e) => onChange({ csvPolicy: e.target.value as ChoiceConfig["csvPolicy"] })}
+        >
+          <option value="delimiter">구분자로 한 열에 결합</option>
+          <option value="one_column_per_option">옵션별 열 분리</option>
+          <option value="json_string">JSON 문자열</option>
+        </select>
       </Field>
     </>
   );

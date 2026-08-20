@@ -17,17 +17,25 @@ export async function PATCH(
 
   const current = await prisma.fieldValue.findUnique({
     where: { id: fieldValueId },
-    include: { field: true, repeatColumn: true },
+    include: { field: { include: { choiceOptions: true } }, repeatColumn: true },
   });
   if (!current) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const source = current.field ?? current.repeatColumn;
   if (!source) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  let documentYear: number | undefined;
+  if (source.type === "date") {
+    const document = await prisma.document.findUnique({ where: { id: documentId }, select: { createdAt: true } });
+    documentYear = document?.createdAt.getFullYear();
+  }
+
   const { normalizedValue, reviewReasons } = validateFieldValue({
     type: source.type,
     required: source.required,
     config: source.config as FieldConfig,
+    choiceOptions: current.field?.choiceOptions.map((o) => o.storedValue),
+    documentYear,
     finalValue: parsed.data.finalValue,
   });
 

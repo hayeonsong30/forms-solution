@@ -17,10 +17,11 @@ enum UserRole {
   reviewer
 }
 
+// 2026-08-20: draft/active + 별도 printable 불리언이라는 두 축짜리 모델이 혼란스럽다는
+// 사용자 피드백으로 단일 축으로 재설계. "편집 중"이거나 "인쇄 가능"이거나 둘 중 하나뿐이다.
 enum TemplateStatus {
-  draft
-  active
-  retired
+  draft // 편집 가능, 인쇄 불가
+  printable // 편집 잠김, 인쇄 가능
 }
 
 enum FieldType {
@@ -126,7 +127,6 @@ model Template {
   org              Organization   @relation(fields: [orgId], references: [id])
   name             String
   status           TemplateStatus @default(draft)
-  printable        Boolean        @default(false)
   printableReason  String?        @map("printable_reason")
   currentVersionId String?        @map("current_version_id")
   createdAt        DateTime       @default(now()) @map("created_at")
@@ -177,24 +177,28 @@ model Field {
   status            FieldStatus @default(confirmed)
   config            Json        @default("{}")
 
-  checkOptions CheckOption[]
-  fieldValues  FieldValue[]
+  choiceOptions ChoiceOption[]
+  fieldValues   FieldValue[]
 
   @@unique([templateVersionId, dataKey])
   @@map("fields")
 }
 
-model CheckOption {
-  id        String @id @default(uuid())
-  fieldId   String @map("field_id")
-  field     Field  @relation(fields: [fieldId], references: [id])
-  label     String
-  regionX   Float  @map("region_x")
-  regionY   Float  @map("region_y")
-  regionW   Float  @map("region_w")
-  regionH   Float  @map("region_h")
+// "선택"(choice) 필드의 옵션. 표시명/저장값은 항상 있고, 문서에서 해당 체크박스 영역을
+// 지정하기 전까지 region은 비어 있다 (편집기 상세 PRD §14.1 "선택 옵션별 판정 영역").
+model ChoiceOption {
+  id          String @id @default(uuid())
+  fieldId     String @map("field_id")
+  field       Field  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  orderNo     Int    @map("order_no")
+  label       String
+  storedValue String @map("stored_value")
+  regionX     Float? @map("region_x")
+  regionY     Float? @map("region_y")
+  regionW     Float? @map("region_w")
+  regionH     Float? @map("region_h")
 
-  @@map("check_options")
+  @@map("choice_options")
 }
 
 model RepeatGroup {
@@ -255,6 +259,8 @@ model Document {
   status            DocumentStatus @default(printed)
   pageImages        Json           @default("[]") @map("page_images")
   createdAt         DateTime       @default(now()) @map("created_at")
+  // 프로토타입 문서 조회 목록의 "인쇄 / 작성 일시" 둘째 줄 — printed → received로 바뀐 시점.
+  receivedAt        DateTime?      @map("received_at")
   confirmedAt       DateTime?      @map("confirmed_at")
   confirmedById     String?        @map("confirmed_by")
   confirmedBy       User?          @relation("DocumentConfirmedBy", fields: [confirmedById], references: [id])

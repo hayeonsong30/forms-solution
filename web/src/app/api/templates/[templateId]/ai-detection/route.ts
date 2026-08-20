@@ -7,6 +7,11 @@ import { parseDataUri } from "@/lib/dataUri";
 import { formDetectionProvider } from "@/lib/ai/formDetection";
 import { GeminiError } from "@/lib/ai/geminiClient";
 
+// Gemini가 신뢰도를 낮게 매겼거나(프롬프트에서 애매하면 낮게 매기도록 요구함), 박스가
+// 실제 필기 영역이라기엔 너무 작은(제목 옆 "年" 한 글자 등) 후보는 확정 필드로 만들지 않는다.
+const MIN_CANDIDATE_CONFIDENCE = 0.4;
+const MIN_CANDIDATE_BOX_AREA = 0.0003;
+
 // PRD_폼솔루션 §7.7.2, §7.7.10: 빈 양식 이미지 → AI 후보 필드 (source=ai, status=suggested).
 // 관리자가 검수해서 확정하기 전까지는 일반 필드 목록에 "제안됨"으로만 표시된다.
 export async function POST(req: Request, ctx: RouteContext<"/api/templates/[templateId]/ai-detection">) {
@@ -53,10 +58,22 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
       return Response.json({ error: "AI_DETECTION_FAILED", message: e instanceof Error ? e.message : String(e) }, { status });
     }
 
+    const detectedCount = candidates.length;
+    candidates = candidates.filter(
+      (c) =>
+        c.confidence >= MIN_CANDIDATE_CONFIDENCE &&
+        c.box.w * c.box.h >= MIN_CANDIDATE_BOX_AREA &&
+        c.box.x >= 0 &&
+        c.box.y >= 0 &&
+        c.box.x + c.box.w <= 1 &&
+        c.box.y + c.box.h <= 1
+    );
+    const filteredOutCount = detectedCount - candidates.length;
+
     const keys = await existingDataKeys(version.id);
     const created = [];
     for (const c of candidates) {
-      const base = slugifyDataKey(c.label);
+      const base = slugifyDataKey(c.key || c.label, c.type);
       const dataKey = withUniqueSuffix(base, keys);
       keys.add(dataKey);
       const field = await prisma.field.create({
@@ -84,7 +101,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
       data: { status: "completed", responsePayload: candidates as unknown as Prisma.InputJsonValue },
     });
 
-    return Response.json({ jobId: job.id, fields: created }, { status: 201 });
+    return Response.json({ jobId: job.id, fields: created, filteredOutCount }, { status: 201 });
   } catch (e) {
     if (e instanceof NotFoundError) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     throw e;

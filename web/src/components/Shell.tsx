@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 const NAV = [
+  { href: "/dashboard", label: "대시보드", icon: "◱" },
   { href: "/templates", label: "양식 관리", icon: "▤" },
   { href: "/documents", label: "문서 조회", icon: "▥" },
 ];
@@ -12,6 +13,8 @@ const NAV = [
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const bare = pathname?.startsWith("/editor");
+
+  if (bare) return <>{children}</>;
 
   return (
     <div className="flex h-screen">
@@ -36,7 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="px-5 py-4 text-xs text-slate-500">네오랩 데모 고객사</div>
       </aside>
-      <div className={`flex-1 min-w-0 ${bare ? "" : "overflow-y-auto"}`}>{children}</div>
+      <div className="flex-1 min-w-0 overflow-y-auto">{children}</div>
     </div>
   );
 }

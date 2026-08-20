@@ -32,18 +32,21 @@ export type CheckConfig = {
 };
 
 export type DateConfig = {
-  format: string;
-  allowBlank: boolean;
+  inputFormat: "auto" | "YYYY/MM/DD" | "YYYY-MM-DD" | "YYYY년 MM월 DD일" | "MM/DD";
+  missingYearPolicy: "document_year" | "current_year" | "review_required";
+  outputFormat: "YYYY-MM-DD" | "source";
 };
 
 export type TimeConfig = {
-  format: string;
-  allowBlank: boolean;
+  inputMode: "auto" | "24h" | "12h" | "split_hour_minute";
+  minuteStep: "free" | 5 | 10 | 30;
+  outputFormat: "HH:mm" | "source";
 };
 
 export type ChoiceConfig = {
   mode: "single" | "multiple";
-  options: string[];
+  conflictPolicy: "review_required" | "last_marked" | "first_marked";
+  csvPolicy: "delimiter" | "one_column_per_option" | "json_string";
 };
 
 export type FieldConfig = {
@@ -53,6 +56,18 @@ export type FieldConfig = {
   date?: DateConfig;
   time?: TimeConfig;
   choice?: ChoiceConfig;
+};
+
+export type ChoiceOptionDTO = {
+  id: string;
+  fieldId: string;
+  orderNo: number;
+  label: string;
+  storedValue: string;
+  regionX: number | null;
+  regionY: number | null;
+  regionW: number | null;
+  regionH: number | null;
 };
 
 export type FieldDTO = {
@@ -73,14 +88,14 @@ export type FieldDTO = {
   source: "manual" | "ai" | "copied";
   status: "suggested" | "confirmed";
   config: FieldConfig;
+  choiceOptions: ChoiceOptionDTO[];
 };
 
 export type TemplateDTO = {
   id: string;
   orgId: string;
   name: string;
-  status: "draft" | "active" | "retired";
-  printable: boolean;
+  status: "draft" | "printable";
   printableReason: string | null;
   currentVersionId: string | null;
   createdAt: string;
@@ -150,11 +165,13 @@ export type DocumentDTO = {
   ncode: string | null;
   status: DocumentStatus;
   createdAt: string;
+  receivedAt: string | null;
   confirmedAt: string | null;
 };
 
 export type DocumentListItemDTO = DocumentDTO & {
-  templateVersion: { pageCount: number; template: { name: string } };
+  templateVersion: { pageCount: number; template: { id: string; name: string } };
+  org: { name: string };
   needsReviewCount: number;
   repeatRowCount: number;
 };
@@ -163,7 +180,22 @@ export type FieldValueDTO = {
   id: string;
   documentId: string;
   fieldId: string | null;
-  field: { id: string; label: string; dataKey: string; required: boolean; type: FieldType; config: FieldConfig } | null;
+  field:
+    | {
+        id: string;
+        label: string;
+        dataKey: string;
+        required: boolean;
+        type: FieldType;
+        config: FieldConfig;
+        choiceOptions: ChoiceOptionDTO[];
+        pageNo: number;
+        boxX: number;
+        boxY: number;
+        boxW: number;
+        boxH: number;
+      }
+    | null;
   repeatGroupId: string | null;
   repeatColumnId: string | null;
   repeatColumn:
@@ -179,7 +211,7 @@ export type FieldValueDTO = {
 };
 
 export type DocumentDetailDTO = DocumentDTO & {
-  templateVersion: { template: { name: string } };
+  templateVersion: { template: { id: string; name: string }; fields: FieldDTO[] };
   fieldValues: FieldValueDTO[];
   pageImageCount: number;
 };

@@ -46,7 +46,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
       prisma.repeatGroup.findMany({ where: { templateVersionId: version.id }, select: { dataKey: true } }),
     ]);
     const existingKeys = new Set([...existingFieldKeys, ...existingGroupKeys].map((k) => k.dataKey));
-    const base = parsed.data.dataKey ? slugifyDataKey(parsed.data.dataKey) : slugifyDataKey(parsed.data.label);
+    const base = slugifyDataKey(parsed.data.dataKey ?? parsed.data.label, "rows");
     const dataKey = withUniqueSuffix(base, existingKeys);
 
     const group = await prisma.$transaction(async (tx) => {

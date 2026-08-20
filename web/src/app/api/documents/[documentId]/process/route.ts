@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
 import { canTransition } from "@/lib/documentStatus";
-import { parseDataUri } from "@/lib/dataUri";
-import { handwritingOcrProvider } from "@/lib/ai/handwritingOcr";
-import { normalizeValue } from "@/lib/normalizeValue";
+import { runOcrPipeline } from "@/lib/runOcr";
 
-// PRD_폼솔루션 §7.7.16: OCR 원본값이 있어도 자동으로 확정하지 않는다 — 전부 검수 필요로 둔다.
-// review_reasons 목록의 manual_review_requested는 OCR을 아예 못 돌린 스텁 케이스에서만 쓴다.
+// 2026-08-20: 예전엔 OCR이 뭘 읽든 무조건 "검수 필요"로 놓고 사람이 14개 필드를 전부
+// 손으로 만져야 다음 단계로 갈 수 있었다 — 화면에서 바로 보고 고칠 수 있는데 그 정도
+// 강제 검수는 매 문서마다 불필요한 클릭 노동이라는 피드백으로 없앴다. 이제는 실제 검증
+// 규칙(validateFieldValue — 필수값 누락·형식 오류 등)을 통과한 값만 바로 confirmed로
+// 놓고, 진짜 문제가 있는 필드만 "확인 필요"로 남긴다. review_reasons의
+// manual_review_requested는 OCR을 아예 못 돌린 스텁 케이스에서만 쓴다.
+// 실제 실행 로직은 lib/runOcr.ts에 있다 — demo-reprocess/route.ts와 공유한다.
 export async function POST(_req: Request, ctx: RouteContext<"/api/documents/[documentId]/process">) {
   const { documentId } = await ctx.params;
   const document = await prisma.document.findUnique({ where: { id: documentId } });
@@ -15,118 +17,10 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/documents/[doc
     return Response.json({ error: "INVALID_TRANSITION", from: document.status, to: "processing" }, { status: 409 });
   }
 
-  await prisma.document.update({ where: { id: documentId }, data: { status: "processing" } });
-
-  const [fields, repeatGroups] = await Promise.all([
-    prisma.field.findMany({ where: { templateVersionId: document.templateVersionId } }),
-    prisma.repeatGroup.findMany({
-      where: { templateVersionId: document.templateVersionId },
-      include: { columns: true },
-    }),
-  ]);
-
-  await prisma.fieldValue.deleteMany({ where: { documentId } });
-
-  const pageImages = (document.pageImages as unknown as string[]) ?? [];
-  const image = pageImages.length > 0 ? parseDataUri(pageImages[0]) : null;
-  const apiKeyConfigured = Boolean(process.env.GEMINI_API_KEY);
-
-  // GEMINI_API_KEY가 없거나 실제 이미지가 없으면(스텁 문자열 등) AI를 호출하지 않고
-  // 전부 "검수 필요, 원본값 없음" 상태로만 만든다 (PRD §7.7.9: API 키 없음은 로컬 Mock만 허용).
-  if (!apiKeyConfigured || !image) {
-    await prisma.fieldValue.createMany({
-      data: [
-        ...fields.map((f) => ({
-          documentId,
-          fieldId: f.id,
-          reviewStatus: "needs_review" as const,
-          reviewReasons: ["manual_review_requested"],
-        })),
-        ...repeatGroups.flatMap((g) =>
-          g.columns.map((c) => ({
-            documentId,
-            repeatGroupId: g.id,
-            repeatColumnId: c.id,
-            rowIndex: 0,
-            reviewStatus: "needs_review" as const,
-            reviewReasons: ["manual_review_requested"],
-          }))
-        ),
-      ],
-    });
-    const updated = await prisma.document.update({ where: { id: documentId }, data: { status: "review_required" } });
-    return Response.json(updated);
+  const result = await runOcrPipeline(documentId);
+  if (!result.ok) {
+    return Response.json({ error: result.error, message: result.message }, { status: result.status });
   }
-
-  const promptVersion = process.env.AI_PROMPT_VERSION ?? "form-v1";
-  const job = await prisma.aiJob.create({
-    data: {
-      targetType: "document",
-      targetId: documentId,
-      documentId,
-      jobType: "handwriting_ocr",
-      status: "processing",
-      provider: "gemini",
-      model: process.env.GEMINI_MODEL ?? "gemini-2.5-flash",
-      promptVersion,
-      requestPayload: fields.map((f) => ({ dataKey: f.dataKey, label: f.label, type: f.type })) as Prisma.InputJsonValue,
-    },
-  });
-
-  let results;
-  try {
-    results = await handwritingOcrProvider.recognize({
-      imageBase64: image.data,
-      mimeType: image.mimeType,
-      fields: fields.map((f) => ({ dataKey: f.dataKey, label: f.label, type: f.type })),
-    });
-  } catch (e) {
-    await prisma.aiJob.update({
-      where: { id: job.id },
-      data: { status: "failed", errorMessage: e instanceof Error ? e.message : String(e) },
-    });
-    await prisma.document.update({ where: { id: documentId }, data: { status: "error" } });
-    return Response.json({ error: "AI_OCR_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
-  }
-
-  const byDataKey = new Map(results.map((r) => [r.dataKey, r]));
-
-  await prisma.fieldValue.createMany({
-    data: [
-      ...fields.map((f) => {
-        const r = byDataKey.get(f.dataKey);
-        return {
-          documentId,
-          fieldId: f.id,
-          rawOcrValue: r?.rawValue ?? null,
-          normalizedValue: r ? normalizeValue(f.type, r.rawValue) : null,
-          valueSource: r ? ("ai" as const) : null,
-          confidence: r?.confidence ?? null,
-          model: job.model,
-          promptVersion,
-          reviewStatus: "needs_review" as const,
-          reviewReasons: r?.rawValue ? [] : ["required_missing"],
-        };
-      }),
-      // 반복행 실제 작성 행 수는 이번 단계에서 아직 감지하지 않는다 (행 단위 OCR은 후속 범위).
-      ...repeatGroups.flatMap((g) =>
-        g.columns.map((c) => ({
-          documentId,
-          repeatGroupId: g.id,
-          repeatColumnId: c.id,
-          rowIndex: 0,
-          reviewStatus: "needs_review" as const,
-          reviewReasons: ["manual_review_requested"],
-        }))
-      ),
-    ],
-  });
-
-  await prisma.aiJob.update({
-    where: { id: job.id },
-    data: { status: "completed", responsePayload: results as unknown as Prisma.InputJsonValue },
-  });
-
-  const updated = await prisma.document.update({ where: { id: documentId }, data: { status: "review_required" } });
+  const updated = await prisma.document.findUniqueOrThrow({ where: { id: documentId } });
   return Response.json(updated);
 }
