@@ -29,6 +29,9 @@ export type CheckConfig = {
   ambiguousPolicy: "always_review" | "nearest_guess";
   regionMode: "box" | "full_area";
   exclusiveWithFieldId?: string;
+  // "boolean": 무슨 기호를 썼든 true/false로 정규화(기존 방식).
+  // "symbol": 실제로 손으로 쓴 기호(V·O·X·✓ 등)를 그대로 값으로 남긴다.
+  outputMode: "boolean" | "symbol";
 };
 
 export type DateConfig = {
@@ -60,7 +63,8 @@ export type FieldConfig = {
 
 export type ChoiceOptionDTO = {
   id: string;
-  fieldId: string;
+  fieldId: string | null;
+  repeatColumnId: string | null;
   orderNo: number;
   label: string;
   storedValue: string;
@@ -129,7 +133,10 @@ export type RepeatColumnDTO = {
   boxH: number;
   required: boolean;
   config: FieldConfig;
+  choiceOptions: ChoiceOptionDTO[];
 };
+
+export type FixedRowValue = { rowIndex: number; values: Record<string, string> };
 
 export type RepeatGroupDTO = {
   id: string;
@@ -146,6 +153,7 @@ export type RepeatGroupDTO = {
   blankRowPolicy: "exclude" | "include";
   useRowNumber: boolean;
   allowDuplicate: boolean;
+  fixedRows: FixedRowValue[] | null;
   columns: RepeatColumnDTO[];
 };
 

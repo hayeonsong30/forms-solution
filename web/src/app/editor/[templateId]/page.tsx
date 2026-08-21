@@ -11,6 +11,7 @@ import { FieldPropertiesPanel, GroupPropertiesPanel, type ChoiceOptionInput } fr
 import { CreateRepeatGroupModal } from "@/components/editor/RepeatGroupModal";
 import { MergeToChoiceModal } from "@/components/editor/MergeToChoiceModal";
 import { DataTestDialog } from "@/components/editor/DataTestDialog";
+import { ExcelTemplateModal } from "@/components/editor/ExcelTemplateModal";
 import { clamp } from "@/components/editor/configPanels";
 import { useCommandStack } from "@/lib/commandStack";
 import { arrayBufferToBase64 } from "@/lib/base64";
@@ -51,6 +52,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   const [multiSelectIds, setMultiSelectIds] = useState<string[]>([]);
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -490,6 +492,27 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   }
 
   async function deleteField(field: FieldDTO) {
+    // 병합된 선택(choice) 필드는 삭제하면 良/否 같은 개별 판정 영역 정의가 통째로 사라진다.
+    // 되돌릴 수 없는 선택이라 삭제 전에 "개별 필드로 복원할지"부터 물어본다.
+    if (field.type === "choice" && field.choiceOptions.length > 0) {
+      const restore = window.confirm(
+        `"${field.label}"은(는) ${field.choiceOptions.length}개 옵션이 합쳐진 선택 필드입니다.\n\n확인: 개별 체크 필드 ${field.choiceOptions.length}개로 복원\n취소: 다음 화면에서 완전 삭제 여부 선택`
+      );
+      if (restore) {
+        const r = await fetch(`/api/templates/${templateId}/fields/${field.id}/split-choice`, { method: "POST" });
+        if (r.ok) {
+          if (selectedId === field.id) setSelectedId(null);
+          await load();
+        } else if (r.status === 409) {
+          setActionError("잠긴 필드는 복원할 수 없습니다.");
+        } else {
+          setActionError("옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.");
+        }
+        return;
+      }
+      const reallyDelete = window.confirm(`"${field.label}"과 옵션 ${field.choiceOptions.length}개를 모두 삭제합니다. 계속할까요?`);
+      if (!reallyDelete) return;
+    }
     const snapshot = { ...field };
     const res = await fetch(`/api/templates/${templateId}/fields/${field.id}`, { method: "DELETE" });
     if (res.ok) {
@@ -517,6 +540,19 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       await load();
     } else if (res.status === 409) {
       setActionError("잠긴 필드는 삭제할 수 없습니다.");
+    }
+  }
+
+  // "선택 필드로 묶기"의 반대 동작: 병합된 choice 필드를 다시 개별 체크 필드들로 되돌린다.
+  async function splitChoiceField(field: FieldDTO) {
+    const r = await fetch(`/api/templates/${templateId}/fields/${field.id}/split-choice`, { method: "POST" });
+    if (r.ok) {
+      if (selectedId === field.id) setSelectedId(null);
+      await load();
+    } else if (r.status === 409) {
+      setActionError("잠긴 필드는 복원할 수 없습니다.");
+    } else {
+      setActionError("옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.");
     }
   }
 
@@ -1035,6 +1071,9 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           <Button onClick={() => setTestDialogOpen(true)} title="빈 원본 양식에서 필드 출력 구조·CSV 열 구성 확인">
             ▷ 데이터 테스트
           </Button>
+          <Button onClick={() => setExcelModalOpen(true)} title="고객 엑셀 서식에 [데이터키]를 넣어 업로드하면 확정값으로 치환해 출력합니다">
+            📊 Data Template
+          </Button>
           {/* 상태는 편집기 전체 잠금 여부를 결정하는 중요한 토글이라, 눈에 잘 띄게 세그먼트
               버튼 형태로 뒀다(대시보드 고객사/시스템 토글과 같은 스타일). 실패 사유는 여기
               고정 표시하지 않고, 시도한 순간에만 아래 배너로 보여준다. */}
@@ -1340,9 +1379,11 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           {selectedGroup && (
             <GroupPropertiesPanel
               group={selectedGroup}
+              templateId={templateId}
               onPatchLocal={(patch) => patchLocalGroup(selectedGroup.id, patch)}
               onSave={(body) => saveGroup(selectedGroup.id, body)}
               onUngroup={ungroupSelected}
+              onColumnsChanged={load}
             />
           )}
           {selected && (
@@ -1356,6 +1397,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
               onAccept={() => acceptSuggested(selected)}
               onReject={() => rejectSuggested(selected)}
               onDelete={() => deleteField(selected)}
+              onSplitChoice={selected.type === "choice" && selected.choiceOptions.length > 0 ? () => splitChoiceField(selected) : undefined}
               onSaveChoiceOptions={(options) => saveChoiceOptions(selected.id, options)}
               onArmOptionRegion={(optionIndex) =>
                 setOptionDraw(optionIndex === null ? null : { fieldId: selected.id, optionIndex })
@@ -1390,6 +1432,8 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           onClose={() => setTestDialogOpen(false)}
         />
       )}
+
+      {excelModalOpen && <ExcelTemplateModal versionId={data.version.id} onClose={() => setExcelModalOpen(false)} />}
     </main>
   );
 }

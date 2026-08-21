@@ -24,6 +24,18 @@ enum TemplateStatus {
   printable // 편집 잠김, 인쇄 가능
 }
 
+// PRD_Excel_플레이스홀더_간단버전 §11: 문서 1건용(doc) / 여러 문서 리스트용(list) 두 종류.
+enum ExcelReportTemplateType {
+  doc
+  list
+}
+
+enum ExcelReportTemplateStatus {
+  validating
+  invalid
+  active
+}
+
 enum FieldType {
   text
   number
@@ -148,12 +160,37 @@ model TemplateVersion {
   createdBy  String?  @map("created_by")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  fields       Field[]
-  repeatGroups RepeatGroup[]
-  documents    Document[]
+  fields               Field[]
+  repeatGroups         RepeatGroup[]
+  documents            Document[]
+  excelReportTemplates ExcelReportTemplate[]
 
   @@unique([templateId, versionNo])
   @@map("template_versions")
+}
+
+// PRD_Excel_플레이스홀더_간단버전: 고객이 자기 엑셀 서식에 [데이터키]를 직접 넣어 올리면,
+// 그 서식(병합·서식·이미지)을 그대로 유지한 채 최종 확정값으로 치환해 돌려준다.
+// 양식 버전마다 doc/list 타입 각각 활성 템플릿 1개만 둔다(간단 버전 범위).
+model ExcelReportTemplate {
+  id                String                     @id @default(uuid())
+  templateVersionId String                     @map("template_version_id")
+  templateVersion   TemplateVersion            @relation(fields: [templateVersionId], references: [id])
+  type              ExcelReportTemplateType
+  name              String
+  fileName          String                     @map("file_name")
+  // 업로드한 원본 .xlsx (base64) — 렌더링 시 매번 이 원본에서 복사해 치환한다.
+  fileData          String                     @map("file_data")
+  checksum          String
+  status            ExcelReportTemplateStatus  @default(validating)
+  placeholderCount  Int                        @default(0) @map("placeholder_count")
+  // ExcelTemplateValidation 결과(§9): { status, validPlaceholders[], errors[] }
+  validationResult  Json                       @map("validation_result")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+
+  @@unique([templateVersionId, type])
+  @@map("excel_report_templates")
 }
 
 model Field {
@@ -186,17 +223,22 @@ model Field {
 
 // "선택"(choice) 필드의 옵션. 표시명/저장값은 항상 있고, 문서에서 해당 체크박스 영역을
 // 지정하기 전까지 region은 비어 있다 (편집기 상세 PRD §14.1 "선택 옵션별 판정 영역").
+// 2026-08-21: 반복행 컬럼(良/否처럼 반복행 안에서 두 영역이 하나의 값인 경우)에도 옵션을
+// 붙일 수 있도록 fieldId를 옵셔널로 바꾸고 repeatColumnId를 추가했다 — 정확히 둘 중
+// 하나만 채워진다(앱 레벨에서 강제, DB制약은 아님).
 model ChoiceOption {
-  id          String @id @default(uuid())
-  fieldId     String @map("field_id")
-  field       Field  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  orderNo     Int    @map("order_no")
-  label       String
-  storedValue String @map("stored_value")
-  regionX     Float? @map("region_x")
-  regionY     Float? @map("region_y")
-  regionW     Float? @map("region_w")
-  regionH     Float? @map("region_h")
+  id             String        @id @default(uuid())
+  fieldId        String?       @map("field_id")
+  field          Field?        @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  repeatColumnId String?       @map("repeat_column_id")
+  repeatColumn   RepeatColumn? @relation(fields: [repeatColumnId], references: [id], onDelete: Cascade)
+  orderNo        Int           @map("order_no")
+  label          String
+  storedValue    String        @map("stored_value")
+  regionX        Float?        @map("region_x")
+  regionY        Float?        @map("region_y")
+  regionW        Float?        @map("region_w")
+  regionH        Float?        @map("region_h")
 
   @@map("choice_options")
 }
@@ -219,6 +261,9 @@ model RepeatGroup {
   blankRowPolicy    String   @map("blank_row_policy")
   useRowNumber      Boolean  @default(false) @map("use_row_number")
   allowDuplicate    Boolean  @default(false) @map("allow_duplicate")
+  // PDF에 이미 인쇄된 행별 고정값 (예: No./점검내용) — OCR 대상이 아니라 그대로 출력에 쓰인다.
+  // FixedRowValue[] 형태: [{ rowIndex, values: { columnDataKey: value } }]
+  fixedRows         Json?    @map("fixed_rows")
 
   columns     RepeatColumn[]
   fieldValues FieldValue[]
@@ -243,7 +288,8 @@ model RepeatColumn {
   required      Boolean     @default(false)
   config        Json        @default("{}")
 
-  fieldValues FieldValue[]
+  choiceOptions ChoiceOption[]
+  fieldValues   FieldValue[]
 
   @@unique([repeatGroupId, dataKey])
   @@map("repeat_columns")

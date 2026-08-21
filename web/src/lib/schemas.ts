@@ -42,6 +42,9 @@ export const checkConfigSchema = z.object({
   regionMode: z.enum(["box", "full_area"]).default("box"),
   // 교차 검증: ITSUWA 합격/불합격처럼 동시 true 불가 대상 필드 (PRD §4.3)
   exclusiveWithFieldId: z.string().optional(),
+  // "boolean"(기본): 어떤 기호를 썼든 true/false로 정규화. "symbol": 손으로 쓴 기호
+  // (V·O·X·✓ 등) 그대로를 값으로 남긴다 — 화면·Excel 출력도 그 문자 그대로 나간다.
+  outputMode: z.enum(["boolean", "symbol"]).default("boolean"),
 });
 
 // 편집기 상세 PRD §4.4는 1차 데모에서 날짜·시간·라디오/다중선택을 제외했지만, 프로토타입은
@@ -133,6 +136,14 @@ export const mergeToChoiceSchema = z.object({
   mode: z.enum(["single", "multiple"]).default("single"),
 });
 
+// PRD_반복행_기능_구현 §4.3: 良/否처럼 반복행 기준행 안의 두 컬럼을 하나의 단일 선택 값으로 묶는다.
+export const mergeRepeatColumnsToChoiceSchema = z.object({
+  columnIds: z.array(z.string()).min(2),
+  label: z.string().min(1),
+  dataKey: z.string().min(1).optional(),
+  mode: z.enum(["single", "multiple"]).default("single"),
+});
+
 // PRD_양식편집기_상세 §11.1: 첫 행 필드 다중선택 후 "반복행으로 묶기"
 export const createRepeatGroupSchema = z.object({
   label: z.string().min(1),
@@ -144,6 +155,12 @@ export const createRepeatGroupSchema = z.object({
   allowDuplicate: z.boolean().default(false),
 });
 
+// PDF에 이미 인쇄된 행별 고정값 (예: No./점검내용) — OCR 대상이 아니라 그대로 출력에 쓰인다.
+export const fixedRowValueSchema = z.object({
+  rowIndex: z.number().int().min(0),
+  values: z.record(z.string(), z.string()),
+});
+
 export const updateRepeatGroupSchema = z.object({
   label: z.string().min(1).optional(),
   dataKey: z.string().min(1).optional(),
@@ -151,6 +168,7 @@ export const updateRepeatGroupSchema = z.object({
   blankRowPolicy: z.enum(["exclude", "include"]).optional(),
   useRowNumber: z.boolean().optional(),
   allowDuplicate: z.boolean().optional(),
+  fixedRows: z.array(fixedRowValueSchema).optional(),
   area: z
     .object({
       x: z.number().min(0).max(1),
@@ -204,4 +222,17 @@ export const uploadTemplatePdfSchema = z.object({
 
 export const exportRequestSchema = z.object({
   documentIds: z.array(z.string()).min(1),
+});
+
+// PRD_Excel_플레이스홀더_간단버전 §9, §11
+export const excelTemplateTypeSchema = z.enum(["doc", "list"]);
+
+export const validateExcelTemplateSchema = z.object({
+  type: excelTemplateTypeSchema,
+  fileName: z.string().min(1),
+  fileDataUri: z.string().startsWith("data:"),
+});
+
+export const saveExcelTemplateSchema = validateExcelTemplateSchema.extend({
+  name: z.string().min(1),
 });

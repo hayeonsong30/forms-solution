@@ -21,6 +21,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
     }
     const fields = await prisma.field.findMany({
       where: { id: { in: parsed.data.fieldIds }, templateVersionId: version.id },
+      include: { choiceOptions: { orderBy: { orderNo: "asc" } } },
     });
     if (fields.length !== parsed.data.fieldIds.length) {
       return Response.json({ error: "FIELD_NOT_FOUND" }, { status: 404 });
@@ -78,10 +79,25 @@ export async function POST(req: Request, ctx: RouteContext<"/api/templates/[temp
               boxH: f.boxH,
               required: f.required,
               config: f.config as Prisma.InputJsonValue,
+              // 원본 필드에 붙어있던 선택 옵션(예: 良/否)도 그대로 컬럼으로 옮겨준다 —
+              // 안 옮기면 반복행으로 묶는 순간 옵션 영역 정의가 통째로 사라진다.
+              choiceOptions: f.choiceOptions.length
+                ? {
+                    create: f.choiceOptions.map((o) => ({
+                      orderNo: o.orderNo,
+                      label: o.label,
+                      storedValue: o.storedValue,
+                      regionX: o.regionX,
+                      regionY: o.regionY,
+                      regionW: o.regionW,
+                      regionH: o.regionH,
+                    })),
+                  }
+                : undefined,
             })),
           },
         },
-        include: { columns: { orderBy: { orderNo: "asc" } } },
+        include: { columns: { orderBy: { orderNo: "asc" }, include: { choiceOptions: { orderBy: { orderNo: "asc" } } } } },
       });
       await tx.field.deleteMany({ where: { id: { in: parsed.data.fieldIds } } });
       return created;

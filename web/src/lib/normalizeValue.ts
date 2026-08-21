@@ -1,6 +1,16 @@
 // OCR 원본값 → 정규화값 (PRD_양식편집기_상세 §4.2 raw/normalized 분리 원칙).
 // 서버 검증 규칙으로 처리하고 AI에게 다시 맡기지 않는다 (PRD_폼솔루션 §7.7.3 역할 분담표).
-import type { DateConfig, FieldConfig, FieldType, TimeConfig } from "@/types";
+import type { CheckConfig, DateConfig, FieldConfig, FieldType, TimeConfig } from "@/types";
+
+// symbol 모드: 실제로 쓴 기호(V·O·X·✓ 등)를 true/false로 뭉개지 않고 그대로 남긴다.
+// trueMarks/falseMarks에 등록된 기호 중 하나와 대소문자 무시하고 일치해야 유효한 값으로 본다.
+function normalizeCheckSymbol(raw: string, config?: CheckConfig): string | null {
+  const trimmed = raw.trim();
+  const known = [...(config?.trueMarks ?? []), ...(config?.falseMarks ?? [])];
+  if (known.length === 0) return trimmed || null;
+  const match = known.find((m) => m.toLowerCase() === trimmed.toLowerCase());
+  return match ?? null;
+}
 
 // inputFormat/inputMode는 관대한 공용 파서를 그대로 쓰고(실제 필기가 정확히 한 형식만
 // 따르지 않는 경우가 많다), missingYearPolicy·minuteStep·outputFormat만 실제로 분기한다.
@@ -58,6 +68,7 @@ export function normalizeValue(type: FieldType, raw: string | null, config?: Fie
     return m ? m[0] : null;
   }
   if (type === "check") {
+    if (config?.check?.outputMode === "symbol") return normalizeCheckSymbol(raw, config.check);
     const v = raw.trim().toLowerCase();
     if (v === "true") return "true";
     if (v === "false") return "false";

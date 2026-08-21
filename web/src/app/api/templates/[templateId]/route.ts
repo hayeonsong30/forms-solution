@@ -16,7 +16,12 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/templates/[temp
       }),
       prisma.repeatGroup.findMany({
         where: { templateVersionId: version.id },
-        include: { columns: { orderBy: { orderNo: "asc" } } },
+        include: {
+          columns: {
+            orderBy: { orderNo: "asc" },
+            include: { choiceOptions: { orderBy: { orderNo: "asc" } } },
+          },
+        },
       }),
     ]);
     // pdfData는 수 MB짜리 base64라 상세 조회 응답에는 있는지 여부만 알려주고,

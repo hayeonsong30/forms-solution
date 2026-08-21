@@ -12,7 +12,7 @@ const NAV = [
 
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const bare = pathname?.startsWith("/editor");
+  const bare = pathname?.startsWith("/editor") || pathname?.startsWith("/simple");
 
   if (bare) return <>{children}</>;
 
@@ -37,6 +37,17 @@ export function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        <div className="px-3 pb-2">
+          <a
+            href="/simple/forms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-[var(--color-sidebar-active)]/60 hover:text-white transition-colors"
+          >
+            <span className="text-xs opacity-70">↗</span>
+            샘플 버전 (새 탭)
+          </a>
+        </div>
         <div className="px-5 py-4 text-xs text-slate-500">네오랩 데모 고객사</div>
       </aside>
       <div className="flex-1 min-w-0 overflow-y-auto">{children}</div>

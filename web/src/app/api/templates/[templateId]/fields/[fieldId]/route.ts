@@ -83,6 +83,24 @@ export async function PATCH(
           })),
         });
       }
+    } else if (box) {
+      // 필드 박스를 옮기면(옵션 목록을 명시적으로 새로 안 준 경우) 그 안의 옵션 영역들도
+      // 같이 따라가야 한다 — 안 그러면 良/否 판정 영역이 필드 박스와 어긋난다.
+      const dx = box.x - current.boxX;
+      const dy = box.y - current.boxY;
+      if (dx !== 0 || dy !== 0) {
+        const options = await tx.choiceOption.findMany({ where: { fieldId } });
+        await Promise.all(
+          options
+            .filter((o) => o.regionX !== null && o.regionY !== null)
+            .map((o) =>
+              tx.choiceOption.update({
+                where: { id: o.id },
+                data: { regionX: o.regionX! + dx, regionY: o.regionY! + dy },
+              })
+            )
+        );
+      }
     }
     const withOptions = await tx.field.findUnique({
       where: { id: fieldId },

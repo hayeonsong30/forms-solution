@@ -3,3 +3,12 @@ node_modules/
 .env
 .env.local
 .claude/
+
+# 저장소는 web/(실제 폼솔루션 앱)만 추적한다 — 기획 문서·프로토타입·샘플 PDF는
+# 로컬에는 남겨두되 깃에는 안 올린다 (2026-08-20, 사용자 결정).
+/*.md
+/*.pdf
+/*.code-workspace
+/kotobuki format/
+/prototype/
+/prototype-react/

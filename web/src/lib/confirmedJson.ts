@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import type { ChoiceConfig, FieldConfig } from "@/types";
 
+export type FixedRowValue = { rowIndex: number; values: Record<string, string> };
+
 export type ConfirmedDocumentJson = {
   documentId: string;
   ncode: string | null;
@@ -12,6 +14,9 @@ export type ConfirmedDocumentJson = {
   repeats: Record<string, Array<Record<string, string | null>>>;
   // 다중 선택 choice 필드의 CSV 방식 적용에 필요한 메타 (§14.1 csvPolicy).
   choiceMeta: Record<string, { csvPolicy: "delimiter" | "one_column_per_option" | "json_string"; options: string[] }>;
+  // PRD_반복행 §5.5: 빈 행 판정은 OCR/작성된 값 기준이지, 아래 fixedRows(PDF에 이미 인쇄된
+  // 고정값)는 판정에서 제외한다 — fixedRows만 있고 나머지가 비어있으면 여전히 빈 행이다.
+  repeatMeta: Record<string, { blankRowPolicy: "exclude" | "include"; fixedRows: FixedRowValue[] }>;
 };
 
 export async function buildConfirmedJson(documentId: string): Promise<ConfirmedDocumentJson | null> {
@@ -32,6 +37,7 @@ export async function buildConfirmedJson(documentId: string): Promise<ConfirmedD
   const fields: Record<string, string | null> = {};
   const repeats: Record<string, Array<Record<string, string | null>>> = {};
   const choiceMeta: ConfirmedDocumentJson["choiceMeta"] = {};
+  const repeatMeta: ConfirmedDocumentJson["repeatMeta"] = {};
 
   for (const v of document.fieldValues) {
     if (v.field) {
@@ -48,6 +54,12 @@ export async function buildConfirmedJson(documentId: string): Promise<ConfirmedD
       const rows = (repeats[groupKey] ??= []);
       while (rows.length <= v.rowIndex) rows.push({});
       rows[v.rowIndex][v.repeatColumn.dataKey] = v.finalValue;
+      if (!repeatMeta[groupKey]) {
+        repeatMeta[groupKey] = {
+          blankRowPolicy: v.repeatColumn.repeatGroup.blankRowPolicy as "exclude" | "include",
+          fixedRows: ((v.repeatColumn.repeatGroup.fixedRows as FixedRowValue[] | null) ?? []),
+        };
+      }
     }
   }
 
@@ -59,6 +71,7 @@ export async function buildConfirmedJson(documentId: string): Promise<ConfirmedD
     fields,
     repeats,
     choiceMeta,
+    repeatMeta,
   };
 }
 
@@ -71,17 +84,34 @@ export function flattenToRows(doc: ConfirmedDocumentJson): Array<Record<string, 
     return [{ ...baseFields }];
   }
 
-  const maxRows = Math.max(...groupKeys.map((k) => doc.repeats[k].length));
+  const maxRows = Math.max(
+    ...groupKeys.map((k) => {
+      const fixedRows = doc.repeatMeta[k]?.fixedRows ?? [];
+      const fixedMax = fixedRows.length > 0 ? Math.max(...fixedRows.map((f) => f.rowIndex)) + 1 : 0;
+      return Math.max(doc.repeats[k].length, fixedMax);
+    })
+  );
+
   const rows: Array<Record<string, string | null>> = [];
   for (let i = 0; i < maxRows; i += 1) {
     const row: Record<string, string | null> = { ...baseFields };
+    let keepRow = false;
     for (const groupKey of groupKeys) {
-      const rowData = doc.repeats[groupKey][i] ?? {};
-      for (const [colKey, value] of Object.entries(rowData)) {
+      const meta = doc.repeatMeta[groupKey];
+      const writtenData = doc.repeats[groupKey][i] ?? {};
+      // PRD_반복행 §5.5: 빈 행 판정은 fixedRows(고정값)를 빼고 실제 작성/OCR된 값만 본다.
+      const isEmpty = Object.values(writtenData).every((v) => v === null || v === undefined || v === "");
+      if (!isEmpty || (meta?.blankRowPolicy ?? "include") === "include") keepRow = true;
+
+      for (const [colKey, value] of Object.entries(writtenData)) {
+        row[`${groupKey}.${colKey}`] = value;
+      }
+      const fixedForRow = meta?.fixedRows.find((f) => f.rowIndex === i)?.values ?? {};
+      for (const [colKey, value] of Object.entries(fixedForRow)) {
         row[`${groupKey}.${colKey}`] = value;
       }
     }
-    rows.push(row);
+    if (keepRow) rows.push(row);
   }
   return rows;
 }

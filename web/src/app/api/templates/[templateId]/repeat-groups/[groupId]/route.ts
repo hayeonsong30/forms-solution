@@ -24,7 +24,7 @@ export async function PATCH(
     throw e;
   }
 
-  const { area, rowHeight, maxRows, dataKey, ...rest } = parsed.data;
+  const { area, rowHeight, maxRows, dataKey, fixedRows, ...rest } = parsed.data;
 
   let nextDataKey: string | undefined;
   if (dataKey) {
@@ -51,7 +51,10 @@ export async function PATCH(
 
   const group = await prisma.$transaction(async (tx) => {
     if (dx !== 0 || dy !== 0) {
-      const columns = await tx.repeatColumn.findMany({ where: { repeatGroupId: groupId } });
+      const columns = await tx.repeatColumn.findMany({
+        where: { repeatGroupId: groupId },
+        include: { choiceOptions: true },
+      });
       await Promise.all(
         columns.map((c) =>
           tx.repeatColumn.update({
@@ -60,12 +63,26 @@ export async function PATCH(
           })
         )
       );
+      // 컬럼 박스와 마찬가지로, choice 컬럼 안의 옵션 판정 영역(良/否 등)도 그룹 이동량만큼 같이 옮긴다.
+      await Promise.all(
+        columns.flatMap((c) =>
+          c.choiceOptions
+            .filter((o) => o.regionX !== null && o.regionY !== null)
+            .map((o) =>
+              tx.choiceOption.update({
+                where: { id: o.id },
+                data: { regionX: o.regionX! + dx, regionY: o.regionY! + dy },
+              })
+            )
+        )
+      );
     }
     return tx.repeatGroup.update({
       where: { id: groupId },
       data: {
         ...rest,
         ...(nextDataKey ? { dataKey: nextDataKey } : {}),
+        ...(fixedRows ? { fixedRows: fixedRows as Prisma.InputJsonValue } : {}),
         areaX: nextAreaX,
         areaY: nextAreaY,
         areaW: nextAreaW,
@@ -74,7 +91,7 @@ export async function PATCH(
         areaH: nextRowHeight * nextMaxRows,
         firstRowArea: { x: nextAreaX, y: nextAreaY, w: nextAreaW, h: nextRowHeight } as Prisma.InputJsonValue,
       },
-      include: { columns: { orderBy: { orderNo: "asc" } } },
+      include: { columns: { orderBy: { orderNo: "asc" }, include: { choiceOptions: { orderBy: { orderNo: "asc" } } } } },
     });
   });
 
@@ -89,7 +106,7 @@ export async function DELETE(
   const { groupId } = await ctx.params;
   const group = await prisma.repeatGroup.findUnique({
     where: { id: groupId },
-    include: { columns: { orderBy: { orderNo: "asc" } } },
+    include: { columns: { orderBy: { orderNo: "asc" }, include: { choiceOptions: { orderBy: { orderNo: "asc" } } } } },
   });
   if (!group) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
   try {
@@ -124,6 +141,21 @@ export async function DELETE(
           source: "manual",
           status: "confirmed",
           config: col.config as Prisma.InputJsonValue,
+          // 반복행 해제 시 컬럼에 붙어있던 선택 옵션(예: 良/否)도 그대로 필드에 옮겨준다 —
+          // 안 옮기면 해제 즉시 옵션 영역 정의가 통째로 사라진다.
+          choiceOptions: col.choiceOptions.length
+            ? {
+                create: col.choiceOptions.map((o) => ({
+                  orderNo: o.orderNo,
+                  label: o.label,
+                  storedValue: o.storedValue,
+                  regionX: o.regionX,
+                  regionY: o.regionY,
+                  regionW: o.regionW,
+                  regionH: o.regionH,
+                })),
+              }
+            : undefined,
         },
       });
     }

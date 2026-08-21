@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ChoiceOptionDTO, FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
+import { MergeToChoiceModal } from "./MergeToChoiceModal";
 import {
   CheckConfigPanel,
   ChoiceConfigPanel,
@@ -30,6 +31,7 @@ export function FieldPropertiesPanel({
   onSaveChoiceOptions,
   onArmOptionRegion,
   armedOptionIndex,
+  onSplitChoice,
 }: {
   field: FieldDTO;
   otherCheckFields: FieldDTO[];
@@ -46,6 +48,7 @@ export function FieldPropertiesPanel({
   onSaveChoiceOptions: (options: ChoiceOptionInput[]) => void;
   onArmOptionRegion: (optionIndex: number | null) => void;
   armedOptionIndex: number | null;
+  onSplitChoice?: () => void;
 }) {
   return (
     <div className="divide-y">
@@ -134,6 +137,14 @@ export function FieldPropertiesPanel({
             onArmRegion={onArmOptionRegion}
             armedIndex={armedOptionIndex}
           />
+          {onSplitChoice && field.choiceOptions.length > 0 && (
+            <button
+              className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 w-full text-slate-600 cursor-pointer mt-2"
+              onClick={onSplitChoice}
+            >
+              선택 해제 (개별 체크 필드 {field.choiceOptions.length}개로 복원)
+            </button>
+          )}
         </Section>
       )}
 
@@ -283,15 +294,45 @@ function toInput(options: ChoiceOptionDTO[]): ChoiceOptionInput[] {
 
 export function GroupPropertiesPanel({
   group,
+  templateId,
   onPatchLocal,
   onSave,
   onUngroup,
+  onColumnsChanged,
 }: {
   group: RepeatGroupDTO;
+  templateId: string;
   onPatchLocal: (patch: Partial<RepeatGroupDTO>) => void;
   onSave: (body: Record<string, unknown>) => void;
   onUngroup: () => void;
+  onColumnsChanged: () => Promise<void>;
 }) {
+  const [selectedColumnIds, setSelectedColumnIds] = useState<string[]>([]);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+
+  function toggleColumn(id: string) {
+    setSelectedColumnIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
+
+  async function mergeColumnsToChoice(opts: { label: string; mode: "single" | "multiple" }) {
+    await fetch(`/api/templates/${templateId}/repeat-groups/${group.id}/merge-to-choice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ columnIds: selectedColumnIds, label: opts.label, mode: opts.mode }),
+    });
+    setSelectedColumnIds([]);
+    setMergeModalOpen(false);
+    await onColumnsChanged();
+  }
+
+  // "선택 컬럼으로 묶기"의 반대: 병합된 choice 컬럼을 옵션 판정 영역 기준으로 다시 개별 체크 컬럼으로 되돌린다.
+  async function splitColumnToChecks(columnId: string) {
+    const r = await fetch(`/api/templates/${templateId}/repeat-groups/${group.id}/columns/${columnId}/split-to-checks`, {
+      method: "POST",
+    });
+    if (r.ok) await onColumnsChanged();
+  }
+
   return (
     <div className="divide-y">
       <Section title="반복행 속성">
@@ -354,22 +395,144 @@ export function GroupPropertiesPanel({
         </label>
       </Section>
       <Section title="열 구성 (첫 행 기준, 좌→우)">
+        <p className="text-xs text-slate-400 -mt-1 mb-1">
+          2개 이상 체크하면 良/否처럼 여러 영역을 하나의 선택 값으로 묶을 수 있습니다.
+        </p>
         <ul className="space-y-1">
           {group.columns.map((c) => (
-            <li key={c.id} className="text-xs border rounded px-2 py-1 flex justify-between">
-              <span>{c.label}</span>
+            <li
+              key={c.id}
+              className={`text-xs border rounded px-2 py-1 flex items-center gap-2 cursor-pointer ${
+                selectedColumnIds.includes(c.id) ? "border-teal-500 bg-teal-50" : ""
+              }`}
+              onClick={() => toggleColumn(c.id)}
+            >
+              <input type="checkbox" checked={selectedColumnIds.includes(c.id)} onChange={() => toggleColumn(c.id)} onClick={(e) => e.stopPropagation()} />
+              <span className="flex-1">{c.label}</span>
               <span className="text-slate-400">
                 {c.dataKey} · {c.type}
+                {c.type === "choice" && c.choiceOptions.length > 0 ? ` (${c.choiceOptions.length})` : ""}
               </span>
+              {c.type === "choice" && c.choiceOptions.length > 0 && (
+                <button
+                  className="text-slate-400 hover:text-teal-600 cursor-pointer underline shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    splitColumnToChecks(c.id);
+                  }}
+                  title={`개별 체크 컬럼 ${c.choiceOptions.length}개로 복원`}
+                >
+                  해제
+                </button>
+              )}
             </li>
           ))}
         </ul>
+        {selectedColumnIds.length >= 2 && (
+          <button
+            className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 w-full cursor-pointer"
+            onClick={() => setMergeModalOpen(true)}
+          >
+            선택 컬럼으로 묶기 ({selectedColumnIds.length})
+          </button>
+        )}
+      </Section>
+      {mergeModalOpen && (
+        <MergeToChoiceModal fieldCount={selectedColumnIds.length} onCancel={() => setMergeModalOpen(false)} onCreate={mergeColumnsToChoice} />
+      )}
+      <Section title="행별 고정값 (PDF에 이미 인쇄된 값)">
+        <p className="text-xs text-slate-400 -mt-1 mb-1">
+          No.·항목명처럼 양식에 이미 인쇄돼 있어 OCR 대상이 아닌 값. 채워두면 CSV/JSON에 그대로 출력됩니다.
+        </p>
+        <FixedRowsEditor group={group} onSave={onSave} />
       </Section>
       <div className="p-4">
         <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={onUngroup}>
           반복행 해제 (첫 행 필드로 되돌리기)
         </button>
       </div>
+    </div>
+  );
+}
+
+// PRD_반복행_기능_구현 §4.2/7 FixedRowValue — 행 인덱스별로 열 dataKey→값을 표로 입력한다.
+// 로컬에서 자유롭게 편집하다가 "저장"을 눌러야 한 번에 PATCH한다(칸마다 요청 보내지 않음).
+function FixedRowsEditor({
+  group,
+  onSave,
+}: {
+  group: RepeatGroupDTO;
+  onSave: (body: Record<string, unknown>) => void;
+}) {
+  const toGrid = (rows: RepeatGroupDTO["fixedRows"]) => {
+    const grid: Record<number, Record<string, string>> = {};
+    for (const r of rows ?? []) grid[r.rowIndex] = { ...r.values };
+    return grid;
+  };
+  const [grid, setGrid] = useState(() => toGrid(group.fixedRows));
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setGrid(toGrid(group.fixedRows));
+    setDirty(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- group.id가 바뀔 때만(다른 그룹 선택 시) 로컬 편집분을 리셋
+  }, [group.id]);
+
+  function setCell(rowIndex: number, dataKey: string, value: string) {
+    setGrid((g) => ({ ...g, [rowIndex]: { ...g[rowIndex], [dataKey]: value } }));
+    setDirty(true);
+  }
+
+  function save() {
+    const fixedRows = Object.entries(grid)
+      .map(([rowIndex, values]) => ({
+        rowIndex: Number(rowIndex),
+        values: Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim() !== "")),
+      }))
+      .filter((r) => Object.keys(r.values).length > 0);
+    onSave({ fixedRows });
+    setDirty(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="max-h-64 overflow-auto border rounded">
+        <table className="text-xs w-full">
+          <thead className="bg-slate-50 sticky top-0">
+            <tr>
+              <th className="px-2 py-1 text-left font-medium w-10">행</th>
+              {group.columns.map((c) => (
+                <th key={c.id} className="px-2 py-1 text-left font-medium whitespace-nowrap">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: group.maxRows }, (_, i) => (
+              <tr key={i} className="border-t">
+                <td className="px-2 py-1 text-slate-400">{i + 1}</td>
+                {group.columns.map((c) => (
+                  <td key={c.id} className="px-1 py-0.5">
+                    <input
+                      className="w-full text-xs px-1.5 py-1 border rounded outline-none focus:border-teal-500"
+                      value={grid[i]?.[c.dataKey] ?? ""}
+                      onChange={(e) => setCell(i, c.dataKey, e.target.value)}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button
+        className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 w-full disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+        disabled={!dirty}
+        onClick={save}
+      >
+        고정값 저장
+      </button>
     </div>
   );
 }

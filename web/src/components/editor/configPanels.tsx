@@ -263,6 +263,16 @@ export function CheckConfigPanel({
           <option value="symbol_classification">true/false 기호</option>
         </select>
       </Field>
+      <Field label="출력 형식">
+        <select
+          className={inputClass}
+          value={v.outputMode ?? "boolean"}
+          onChange={(e) => onChange({ outputMode: e.target.value as CheckConfig["outputMode"] })}
+        >
+          <option value="boolean">T/F로 변환 (true/false)</option>
+          <option value="symbol">필기 인식 그대로 (V·O·X 등)</option>
+        </select>
+      </Field>
       <Field label="true 표시">
         <MarkToggleGroup options={TRUE_MARK_OPTIONS} selected={v.trueMarks ?? ["CHECK", "V"]} onChange={(trueMarks) => onChange({ trueMarks })} />
       </Field>

@@ -87,6 +87,14 @@ function configNote(f: OcrFieldRequest): string {
     if (ch.falseMarks?.length) parts.push(`false로 볼 표시=[${ch.falseMarks.join(", ")}]`);
     if (ch.blankValue) parts.push(`빈칸 처리=${ch.blankValue}`);
     if (ch.ambiguousPolicy) parts.push(`애매하면=${ch.ambiguousPolicy}`);
+    // symbol 모드: true/false로 뭉개지 말고 실제로 그려진 기호 문자 그대로 반환하게 한다.
+    if (ch.outputMode === "symbol") {
+      parts.push(
+        `출력형식=true/false로 바꾸지 말고 실제로 그려진 기호를 위 표시 목록 중 하나로 그대로 rawValue에 반환(예: "${
+          ch.trueMarks?.[0] ?? "V"
+        }" 또는 "${ch.falseMarks?.[0] ?? "X"}"), 아무 표시도 없으면 null`
+      );
+    }
   }
   if (f.type === "date" && c.date) {
     const d = c.date;

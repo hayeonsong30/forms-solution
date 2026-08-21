@@ -621,7 +621,10 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                 <span className="text-xs text-[#1768d7]">{csvEntries.length}개 열 · 1건</span>
               </div>
               <div className="flex-1 min-h-0 min-w-0 m-3 flex flex-col border border-[#dbe1e7] rounded-md overflow-hidden">
-                <div ref={csvScrollRef} className="flex-1 min-h-0 min-w-0 overflow-auto">
+                <div
+                  ref={csvScrollRef}
+                  className="flex-1 min-h-0 min-w-0 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
                   <table className="text-sm min-w-full">
                   <thead className="bg-slate-50 text-slate-400 sticky top-0">
                     <tr>
