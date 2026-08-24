@@ -2,15 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type DocumentListItem = {
-  id: string;
-  ncode: string | null;
-  status: string;
-  createdAt: string;
-  confirmedAt: string | null;
-  templateVersion: { template: { id: string; name: string } };
-};
+import type { DocumentListItemDTO } from "@/types";
+import { PenConnectPanel } from "@/components/PenConnectPanel";
 
 const STATUS_LABEL: Record<string, string> = {
   printed: "인쇄됨",
@@ -23,18 +16,39 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default function SimpleDocumentsPage() {
   const router = useRouter();
-  const [documents, setDocuments] = useState<DocumentListItem[]>([]);
+  const [documents, setDocuments] = useState<DocumentListItemDTO[]>([]);
+  const [showPenPanel, setShowPenPanel] = useState(false);
+
+  const refresh = () => fetch("/api/documents").then((r) => r.json()).then(setDocuments);
 
   useEffect(() => {
-    fetch("/api/documents")
-      .then((r) => r.json())
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
-      .then(setDocuments);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
+    refresh();
   }, []);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <h1 className="text-lg font-semibold text-slate-900 mb-6">문서 조회</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-lg font-semibold text-slate-900">문서 조회</h1>
+        <button
+          onClick={() => setShowPenPanel(true)}
+          className="text-sm font-medium rounded-lg px-3 py-1.5 bg-slate-900 text-white hover:bg-slate-800 cursor-pointer"
+        >
+          ↑ 펜 데이터 가져오기
+        </button>
+      </div>
+
+      {showPenPanel && (
+        <PenConnectPanel
+          documents={documents}
+          onClose={() => setShowPenPanel(false)}
+          onImported={(documentId) => {
+            setShowPenPanel(false);
+            router.push(`/simple/documents/${documentId}`);
+          }}
+        />
+      )}
+
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-400">
