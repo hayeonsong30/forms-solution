@@ -30,6 +30,29 @@ function formatDateTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+function fileToDataUri(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function pdfToPageImages(file: File): Promise<string[]> {
+  // 정적 import 금지 — pdfjs-dist는 DOMMatrix 등 브라우저 전용 전역을 모듈 평가 시점에
+  // 참조해서 SSR에서 죽는다 (components/editor/PdfPageCanvas.tsx와 동일한 이유).
+  const { loadPdf, renderPageToCanvas } = await import("@/lib/pdf");
+  const pdf = await loadPdf(await file.arrayBuffer());
+  const canvas = document.createElement("canvas");
+  const images: string[] = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    await renderPageToCanvas(pdf, pageNumber, canvas, 1600, () => false);
+    images.push(canvas.toDataURL("image/png"));
+  }
+  return images;
+}
+
 export default function DocumentsPage() {
   const router = useRouter();
   const [documents, setDocuments] = useState<DocumentListItemDTO[]>([]);
@@ -257,16 +280,13 @@ function PenConnectPanel({
     if (!file) return;
     const target = [...documents].filter((d) => d.status === "printed").sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
     if (!target) return;
-    const dataUri: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
+
+    const pageImages = file.type === "application/pdf" ? await pdfToPageImages(file) : [await fileToDataUri(file)];
+
     const res = await fetch(`/api/documents/${target.id}/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pageImages: [dataUri] }),
+      body: JSON.stringify({ pageImages }),
     });
     if (res.ok) onImported(target.id);
   }
@@ -326,7 +346,7 @@ function PenConnectPanel({
             {printedCount > 0 && (
               <ButtonLabel className="text-xs">
                 테스트용 이미지로 대체
-                <input type="file" accept="image/*" className="hidden" onChange={importFallback} />
+                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={importFallback} />
               </ButtonLabel>
             )}
             <Button onClick={onClose}>취소</Button>
