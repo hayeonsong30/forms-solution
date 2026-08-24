@@ -43,6 +43,7 @@ export function PenConnectPanel({
   const [connecting, setConnecting] = useState(true);
   const [connectFailed, setConnectFailed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     setConnecting(true);
@@ -58,8 +59,12 @@ export function PenConnectPanel({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    setImportError(null);
     const target = [...documents].filter((d) => d.status === "printed").sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-    if (!target) return;
+    if (!target) {
+      setImportError("인쇄됨 상태인 문서가 없습니다. 양식을 먼저 인쇄해 주세요.");
+      return;
+    }
 
     const pageImages = file.type === "application/pdf" ? await pdfToPageImages(file) : [await fileToDataUri(file)];
 
@@ -69,9 +74,8 @@ export function PenConnectPanel({
       body: JSON.stringify({ pageImages }),
     });
     if (res.ok) onImported(target.id);
+    else setImportError("가져오기에 실패했습니다.");
   }
-
-  const printedCount = documents.filter((d) => d.status === "printed").length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -119,16 +123,15 @@ export function PenConnectPanel({
           {connectFailed && (
             <p className="px-5 py-2.5 text-xs text-red-600 border-t border-[var(--color-border)]">USB 연결 상태 수신 시작에 실패했습니다.</p>
           )}
+          {importError && <p className="px-5 py-2.5 text-xs text-red-600 border-t border-[var(--color-border)]">{importError}</p>}
 
           <div className="flex items-center gap-2 px-5 py-3.5 border-t border-[var(--color-border)]">
             <Button onClick={() => setRetryKey((k) => k + 1)}>↻ 새로고침</Button>
             <div className="flex-1" />
-            {printedCount > 0 && (
-              <ButtonLabel className="text-xs">
-                테스트용 이미지로 대체
-                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={importFallback} />
-              </ButtonLabel>
-            )}
+            <ButtonLabel className="text-xs">
+              테스트용 이미지로 대체
+              <input type="file" accept="image/*,application/pdf" className="hidden" onChange={importFallback} />
+            </ButtonLabel>
             <Button onClick={onClose}>취소</Button>
           </div>
         </Card>
