@@ -42,3 +42,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Prisma CLI's auto-installed AI assistant skill docs — not app code
+/.agents
+/.claude/skills
+/.windsurf
+/skills-lock.json
