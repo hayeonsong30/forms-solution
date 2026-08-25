@@ -3,8 +3,7 @@ export type FieldType = "text" | "number" | "check" | "date" | "time" | "choice"
 export type TextConfig = {
   writingMode: "single" | "multiline";
   language: "ja" | "ko" | "en" | "auto";
-  charPolicy: "all" | "numeric_included" | "alnum" | "custom_pattern";
-  customPattern?: string;
+  charPolicy: "all" | "numeric_included" | "alnum";
   maxLength?: number;
   preserveWhitespace: boolean;
   preserveNewline: boolean;
@@ -26,9 +25,6 @@ export type CheckConfig = {
   trueMarks: string[];
   falseMarks: string[];
   blankValue: "false" | "null" | "required_error";
-  ambiguousPolicy: "always_review" | "nearest_guess";
-  regionMode: "box" | "full_area";
-  exclusiveWithFieldId?: string;
   // "boolean": 무슨 기호를 썼든 true/false로 정규화(기존 방식).
   // "symbol": 실제로 손으로 쓴 기호(V·O·X·✓ 등)를 그대로 값으로 남긴다.
   outputMode: "boolean" | "symbol";
@@ -36,20 +32,18 @@ export type CheckConfig = {
 
 export type DateConfig = {
   inputFormat: "auto" | "YYYY/MM/DD" | "YYYY-MM-DD" | "YYYY년 MM월 DD일" | "MM/DD";
-  missingYearPolicy: "document_year" | "current_year" | "review_required";
   outputFormat: "YYYY-MM-DD" | "source";
 };
 
 export type TimeConfig = {
   inputMode: "auto" | "24h" | "12h" | "split_hour_minute";
-  minuteStep: "free" | 5 | 10 | 30;
   outputFormat: "HH:mm" | "source";
 };
 
 export type ChoiceConfig = {
   mode: "single" | "multiple";
   conflictPolicy: "review_required" | "last_marked" | "first_marked";
-  csvPolicy: "delimiter" | "one_column_per_option" | "json_string";
+  csvPolicy: "delimiter" | "one_column_per_option";
 };
 
 export type FieldConfig = {
@@ -102,6 +96,8 @@ export type TemplateDTO = {
   status: "draft" | "printable";
   printableReason: string | null;
   currentVersionId: string | null;
+  printCopies: number;
+  printedCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -182,6 +178,12 @@ export type DocumentListItemDTO = DocumentDTO & {
   org: { name: string };
   needsReviewCount: number;
   repeatRowCount: number;
+  // 동일 SOBP(ncode)로 여러 건이 들어온 경우(예: 고토부키형 공유 SOBP) 목록에서는 1건으로
+  // 묶어 보여준다 — pageScanCount는 그 그룹에 실제로 들어온 스캔(페이지) 수, groupIds는
+  // 그룹에 속한 모든 문서 id(가상번호 순서 = createdAt 오름차순). 일반 문서는 항상
+  // pageScanCount=1, groupIds=[해당 문서 id 하나].
+  pageScanCount: number;
+  groupIds: string[];
 };
 
 export type FieldValueDTO = {
@@ -219,9 +221,15 @@ export type FieldValueDTO = {
 };
 
 export type DocumentDetailDTO = DocumentDTO & {
-  templateVersion: { template: { id: string; name: string }; fields: FieldDTO[] };
+  templateVersion: { pageCount: number; template: { id: string; name: string }; fields: FieldDTO[] };
   fieldValues: FieldValueDTO[];
   pageImageCount: number;
+  // 페이지마다 새 SOBP가 발급되는 게 원칙이라(§14 항목1) 페이지별 패턴주소를 담는다.
+  // index 0 = 1페이지. 아직 실 펜 SDK 연동 전이라 문서 생성 시 임시로 채워진다.
+  pageNcodes: string[];
+  // 공유 SOBP로 이 문서와 같은 ncode를 쓰는 다른 문서들(2건 이상일 때만 채워짐, 자기 자신
+  // 포함, createdAt 오름차순 = 가상번호 순서). PRD_폼솔루션 §14.1.
+  siblings: { id: string; ncode: string | null; createdAt: string; status: DocumentStatus }[];
 };
 
 export type FieldIssue = {

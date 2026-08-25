@@ -1,8 +1,26 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage, type Lang } from "@/lib/language";
+
+const STRINGS = {
+  ko: {
+    heading: "빈 양식 PDF를 업로드하세요",
+    instructions: "PDF를 이 영역으로 끌어다 놓거나 파일을 선택하세요. 최대 20MB.",
+    selectFile: "PDF 파일 선택",
+    footnote: "PDF가 업로드되기 전까지 필드 추가와 AI 자동 추천은 사용할 수 없습니다.",
+  },
+  ja: {
+    heading: "空の様式PDFをアップロードしてください",
+    instructions: "PDFをこの領域にドラッグ&ドロップするか、ファイルを選択してください。最大20MB。",
+    selectFile: "PDFファイルを選択",
+    footnote: "PDFがアップロードされるまで、項目の追加とAI自動提案は使用できません。",
+  },
+} satisfies Record<Lang, unknown>;
 
 export function PdfUploadEmpty({ onUpload }: { onUpload: (file: File) => void }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [dragOver, setDragOver] = useState(false);
 
   return (
@@ -24,10 +42,10 @@ export function PdfUploadEmpty({ onUpload }: { onUpload: (file: File) => void })
         }`}
       >
         <div className="text-3xl mb-3">📄</div>
-        <h2 className="font-medium mb-1">빈 양식 PDF를 업로드하세요</h2>
-        <p className="text-sm text-slate-400 mb-4">PDF를 이 영역으로 끌어다 놓거나 파일을 선택하세요. 최대 20MB.</p>
+        <h2 className="font-medium mb-1">{s.heading}</h2>
+        <p className="text-sm text-slate-400 mb-4">{s.instructions}</p>
         <label className="inline-flex items-center rounded-lg bg-[var(--color-brand-600)] text-white text-sm font-medium px-4 py-2 cursor-pointer hover:bg-[var(--color-brand-700)]">
-          PDF 파일 선택
+          {s.selectFile}
           <input
             type="file"
             accept="application/pdf"
@@ -39,7 +57,7 @@ export function PdfUploadEmpty({ onUpload }: { onUpload: (file: File) => void })
             }}
           />
         </label>
-        <p className="text-[11px] text-slate-400 mt-4">PDF가 업로드되기 전까지 필드 추가와 AI 자동 추천은 사용할 수 없습니다.</p>
+        <p className="text-[11px] text-slate-400 mt-4">{s.footnote}</p>
       </div>
     </div>
   );

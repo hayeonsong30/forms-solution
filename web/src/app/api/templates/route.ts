@@ -11,12 +11,13 @@ export async function GET() {
   const withCounts = await Promise.all(
     templates.map(async (t) => {
       const version = t.versions[0];
-      const [fieldCount, groupCount] = version
+      const [fieldCount, groupCount, printedCount] = version
         ? await Promise.all([
             prisma.field.count({ where: { templateVersionId: version.id } }),
             prisma.repeatGroup.count({ where: { templateVersionId: version.id } }),
+            prisma.document.count({ where: { templateVersionId: version.id } }),
           ])
-        : [0, 0];
+        : [0, 0, 0];
       return {
         id: t.id,
         orgId: t.orgId,
@@ -24,6 +25,8 @@ export async function GET() {
         status: t.status,
         printableReason: t.printableReason,
         currentVersionId: t.currentVersionId,
+        printCopies: t.printCopies,
+        printedCount,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
         org: t.org,

@@ -24,8 +24,23 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/documents/[docu
   });
   if (!document) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  // 이 문서와 같은 SOBP(ncode)를 쓰는 문서들 — 문서 상세 화면에 "페이지별 SOBP" 바를
+  // 보여주는 데 쓴다(PRD_폼솔루션 §14.1). 공유 SOBP가 아니면 자기 자신 1건뿐이다.
+  // createdAt 오름차순이 곧 가상번호(페이지) 순서다.
+  const siblings = document.ncode
+    ? await prisma.document.findMany({
+        where: { ncode: document.ncode },
+        select: { id: true, ncode: true, createdAt: true, status: true },
+        orderBy: { createdAt: "asc" },
+      })
+    : [{ id: document.id, ncode: document.ncode, createdAt: document.createdAt, status: document.status }];
+
   // pageImages는 base64 원본 이미지를 담을 수 있어 매 조회마다 실어 보내면 무겁다.
   // 페이지 수만 알려주고, 실제 이미지가 필요하면 별도 엔드포인트에서 받도록 한다.
   const { pageImages, ...rest } = document;
-  return Response.json({ ...rest, pageImageCount: (pageImages as unknown as string[]).length });
+  return Response.json({
+    ...rest,
+    pageImageCount: (pageImages as unknown as string[]).length,
+    siblings,
+  });
 }

@@ -1,43 +1,189 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { DocumentDetailDTO, DocumentStatus, FieldType } from "@/types";
 import { downloadExport } from "@/lib/downloadExport";
 import { Badge, Button, ButtonLabel, Card, Input, Select } from "@/components/ui";
 import { PdfPageCanvas } from "@/components/editor/PdfPageCanvas";
+import { useLanguage, type Lang } from "@/lib/language";
 
-const STATUS: Record<DocumentStatus, { label: string; tone: "amber" | "green" | "slate" | "red" | "brand" }> = {
-  printed: { label: "인쇄됨", tone: "slate" },
-  received: { label: "작성", tone: "slate" },
-  processing: { label: "처리 중", tone: "brand" },
-  review_required: { label: "검수 필요", tone: "amber" },
-  confirmed: { label: "확정", tone: "green" },
-  error: { label: "오류", tone: "red" },
-};
-
-const REASON_LABEL: Record<string, string> = {
-  required_missing: "필수값 누락",
-  type_mismatch: "형식 오류",
-  number_out_of_range: "숫자 범위 초과",
-  invalid_date: "날짜 형식 오류",
-  invalid_time: "시간 형식 오류",
-  unknown_choice: "정의되지 않은 선택지",
-  choice_conflict: "교차 검증 충돌",
-  manual_review_requested: "AI 인식 없음 — 직접 확인 필요",
-};
-
-const FIELD_TYPE_LABEL: Record<FieldType, string> = {
-  text: "텍스트",
-  number: "숫자",
-  date: "날짜",
-  time: "시간",
-  check: "체크 판정",
-  choice: "선택",
+const STATUS_TONE: Record<DocumentStatus, "amber" | "green" | "slate" | "red" | "brand"> = {
+  printed: "slate",
+  received: "slate",
+  processing: "brand",
+  review_required: "amber",
+  confirmed: "green",
+  error: "red",
 };
 
 const ISSUE_REASONS = new Set(["required_missing", "type_mismatch", "invalid_date", "invalid_time", "number_out_of_range"]);
+
+const ROW_STATUS_CLASS: Record<RowStatus, string> = {
+  pending: "bg-slate-100 text-slate-500",
+  issue: "bg-red-50 text-red-600",
+  review: "bg-[var(--color-status-amber-bg)] text-[var(--color-status-amber-fg)]",
+  done: "bg-[var(--color-status-green-bg)] text-[var(--color-status-green-fg)]",
+};
+
+const STRINGS = {
+  ko: {
+    status: {
+      printed: "인쇄됨",
+      received: "작성",
+      processing: "처리 중",
+      review_required: "검수 필요",
+      confirmed: "확정",
+      error: "오류",
+    } satisfies Record<DocumentStatus, string>,
+    reason: {
+      required_missing: "필수값 누락",
+      type_mismatch: "형식 오류",
+      number_out_of_range: "숫자 범위 초과",
+      invalid_date: "날짜 형식 오류",
+      invalid_time: "시간 형식 오류",
+      unknown_choice: "정의되지 않은 선택지",
+      choice_conflict: "교차 검증 충돌",
+      manual_review_requested: "AI 인식 없음 — 직접 확인 필요",
+    } as Record<string, string>,
+    fieldType: {
+      text: "텍스트",
+      number: "숫자",
+      date: "날짜",
+      time: "시간",
+      check: "체크 판정",
+      choice: "선택",
+    } satisfies Record<FieldType, string>,
+    rowStatus: {
+      pending: "OCR 전",
+      issue: "미입력·오류",
+      review: "확인 필요",
+      done: "완료",
+    },
+    loading: "불러오는 중…",
+    rowLabel: (label: string, rowIndex: number | null) => (rowIndex !== null ? `${label} [행 ${rowIndex + 1}]` : label),
+    uploadingImage: "이미지 업로드 중…",
+    processingAi: "AI 처리 중… (최대 2분)",
+    runOcr: "+ AI OCR 실행",
+    pdf: "PDF",
+    csv: "CSV",
+    excel: "Excel",
+    confirmFinal: "최종 확정",
+    demoTitle: "데모 전용 — 상태와 무관하게 AI OCR을 다시 돌립니다",
+    demoRerunning: "다시 실행 중…",
+    demoRerun: "↻ 다시 실행 (데모)",
+    confirm: "확인",
+    cancel: "취소",
+    zoomOut: "축소",
+    zoomIn: "확대",
+    sourceAlt: "작성 원본",
+    noSourceImage: "작성 원본 이미지가 없습니다.",
+    sourceHint: "◱ 오른쪽 필드값을 누르면 원본 위치가 표시됩니다.",
+    sourceFormats: "JPG · PNG · 단일 페이지 PDF",
+    recognizedFields: "인식된 필드값",
+    recognizedFieldsDesc: "OCR 결과를 확인·수정한 후 최종 확정합니다.",
+    rerunOcr: "↻ OCR 다시 실행",
+    noRows: "해당하는 필드가 없습니다.",
+    csvAutoGen: "CSV 자동 생성",
+    csvAutoGenDesc: "데이터 키가 열 이름으로 사용됩니다.",
+    csvColumnsCount: (n: number) => `${n}개 열 · 1건`,
+    csvPreviewTitle: "AI 인식값 미리보기 — 아직 확정 전이라 다운로드에는 포함되지 않습니다",
+    csvGrayHint: "회색 기울임 = AI 인식값(미확정, 다운로드 미포함)",
+    back: "← 이전 화면으로",
+    pagePanelTitle: "페이지",
+    pagePanelNo: "No.",
+    pagePanelAddress: "SOBP",
+    pagePrev: "이전 페이지",
+    pageNext: "다음 페이지",
+    unset: "(미기재)",
+    noChoiceOptions: "선택지가 정의되지 않았습니다.",
+    placeholders: { date: "년.월.일.", time: "--:--", number: "0" },
+    errors: {
+      invalidTransition: "지금 상태에서는 이 동작을 할 수 없습니다.",
+      validationFailed: "확인이 필요한 값이 남아 있어 확정할 수 없습니다. 아래 표에서 강조된 항목을 채우세요.",
+      generic: "작업을 처리하지 못했습니다.",
+    },
+  },
+  ja: {
+    status: {
+      printed: "印刷済み",
+      received: "作成中",
+      processing: "処理中",
+      review_required: "要確認",
+      confirmed: "確定",
+      error: "エラー",
+    } satisfies Record<DocumentStatus, string>,
+    reason: {
+      required_missing: "必須項目未入力",
+      type_mismatch: "形式エラー",
+      number_out_of_range: "数値範囲超過",
+      invalid_date: "日付形式エラー",
+      invalid_time: "時刻形式エラー",
+      unknown_choice: "未定義の選択肢",
+      choice_conflict: "相互検証の不整合",
+      manual_review_requested: "AI未認識 — 直接確認が必要",
+    } as Record<string, string>,
+    fieldType: {
+      text: "テキスト",
+      number: "数値",
+      date: "日付",
+      time: "時刻",
+      check: "チェック判定",
+      choice: "選択",
+    } satisfies Record<FieldType, string>,
+    rowStatus: {
+      pending: "OCR前",
+      issue: "未入力・エラー",
+      review: "要確認",
+      done: "完了",
+    },
+    loading: "読み込み中…",
+    rowLabel: (label: string, rowIndex: number | null) => (rowIndex !== null ? `${label} [行 ${rowIndex + 1}]` : label),
+    uploadingImage: "画像アップロード中…",
+    processingAi: "AI処理中…（最大2分）",
+    runOcr: "+ AI OCR実行",
+    pdf: "PDF",
+    csv: "CSV",
+    excel: "Excel",
+    confirmFinal: "最終確定",
+    demoTitle: "デモ専用 — 状態に関係なくAI OCRを再実行します",
+    demoRerunning: "再実行中…",
+    demoRerun: "↻ 再実行（デモ）",
+    confirm: "確認",
+    cancel: "キャンセル",
+    zoomOut: "縮小",
+    zoomIn: "拡大",
+    sourceAlt: "作成原本",
+    noSourceImage: "作成原本画像がありません。",
+    sourceHint: "◱ 右側のフィールド値をクリックすると原本の位置が表示されます。",
+    sourceFormats: "JPG · PNG · 単一ページPDF",
+    recognizedFields: "認識されたフィールド値",
+    recognizedFieldsDesc: "OCR結果を確認・修正した後、最終確定してください。",
+    rerunOcr: "↻ OCR再実行",
+    noRows: "該当するフィールドがありません。",
+    csvAutoGen: "CSV自動生成",
+    csvAutoGenDesc: "データキーが列名として使用されます。",
+    csvColumnsCount: (n: number) => `${n}列 · 1件`,
+    csvPreviewTitle: "AI認識値プレビュー — まだ確定前のためダウンロードには含まれません",
+    csvGrayHint: "グレー斜体 = AI認識値（未確定、ダウンロード対象外）",
+    back: "← 前の画面へ",
+    pagePanelTitle: "ページ",
+    pagePanelNo: "No.",
+    pagePanelAddress: "SOBP",
+    pagePrev: "前のページ",
+    pageNext: "次のページ",
+    unset: "（未記入）",
+    noChoiceOptions: "選択肢が定義されていません。",
+    placeholders: { date: "年.月.日.", time: "--:--", number: "0" },
+    errors: {
+      invalidTransition: "現在の状態ではこの操作を行えません。",
+      validationFailed: "確認が必要な値が残っているため確定できません。以下の表で強調表示された項目を入力してください。",
+      generic: "処理に失敗しました。",
+    },
+  },
+} satisfies Record<Lang, unknown>;
+
+type Strings = typeof STRINGS.ko;
 
 // 데모/시연용 — 켜져 있으면 문서 상태(확정 포함)와 무관하게 AI OCR을 다시 실행할 수 있다.
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
@@ -51,24 +197,18 @@ function rowStatusOf(v: { reviewStatus: string; reviewReasons: string[]; rawOcrV
   return "review";
 }
 
-const ROW_STATUS_META: Record<RowStatus, { label: string; className: string }> = {
-  pending: { label: "OCR 전", className: "bg-slate-100 text-slate-500" },
-  issue: { label: "미입력·오류", className: "bg-red-50 text-red-600" },
-  review: { label: "확인 필요", className: "bg-[var(--color-status-amber-bg)] text-[var(--color-status-amber-fg)]" },
-  done: { label: "완료", className: "bg-[var(--color-status-green-bg)] text-[var(--color-status-green-fg)]" },
-};
-
 // 프로토타입 outputDialog(현행 확정 화면)과 동일한 구조로 맞춘다: 좌측 작성 원본 뷰어 +
 // 우측 "인식된 필드값"(요약 4분류 + 필터 + 행 목록) + "CSV 자동 생성" 미리보기, 하단에
 // 뒤로가기 + 안내 문구. 필드 행은 처리 전(OCR 전)에도 항상 목록으로 보여서 화면이 비어
 // 보이지 않게 한다 — 값이 없으면 그 필드의 자리에 빈 입력 + "OCR 전" 태그만 뜬다.
 export default function DocumentDetailPage({ params }: { params: Promise<{ documentId: string }> }) {
   const router = useRouter();
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const { documentId } = use(params);
   const [doc, setDoc] = useState<DocumentDetailDTO | null>(null);
+  const [selectedPage, setSelectedPage] = useState(1);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [reopenReason, setReopenReason] = useState("");
-  const [showReopen, setShowReopen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   // zoom=100은 "패널 너비에 꽉 채움"을 뜻한다 — 고정 700px 캔버스가 아니라 실측 패널 폭에
@@ -110,8 +250,6 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
     // 다시는 재구독하지 않았다. doc이 실제로 생기는 시점에 맞춰 재실행되게 한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc]);
-  const [reviewFilter, setReviewFilter] = useState<"all" | "review" | "issue">("all");
-  const [showJson, setShowJson] = useState(false);
   const [templatePdfBuffer, setTemplatePdfBuffer] = useState<ArrayBuffer | null>(null);
   const [, setTemplatePdfSize] = useState<{ width: number; height: number } | null>(null);
 
@@ -121,8 +259,9 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
   }, [documentId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount, and reset page selector when navigating between documents
     load();
+    setSelectedPage(1);
   }, [load]);
 
   // 아직 필기 이미지가 없으면(예: printed 상태) 대신 양식의 빈 PDF 1페이지를 원본 자리에
@@ -152,7 +291,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
       });
       const json = await res.json();
       if (!res.ok) {
-        setActionError(describeError(json));
+        setActionError(describeError(json, s));
         return;
       }
       await load();
@@ -168,15 +307,6 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
-  }
-
-  // "필기 이미지 업로드" — 이미지만 첨부하고(상태: 필기 수신) OCR은 별도로 실행한다.
-  async function importFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const dataUri = await readFileAsDataUri(file);
-    await runAction("import", { pageImages: [dataUri] });
   }
 
   // "+ AI OCR 실행" — 버튼 라벨대로 이미지 업로드 직후 곧바로 OCR까지 이어서 실행한다.
@@ -197,14 +327,14 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
       });
       const importJson = await importRes.json();
       if (!importRes.ok) {
-        setActionError(describeError(importJson));
+        setActionError(describeError(importJson, s));
         return;
       }
       setBusy("process");
       const processRes = await fetch(`/api/documents/${documentId}/process`, { method: "POST" });
       const processJson = await processRes.json();
       if (!processRes.ok) {
-        setActionError(describeError(processJson));
+        setActionError(describeError(processJson, s));
         return;
       }
       await load();
@@ -227,20 +357,32 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
     document.getElementById(`field-row-${key}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
 
-  if (!doc) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
+  if (!doc) return <div className="p-8 text-sm text-slate-400">{s.loading}</div>;
 
-  const status = STATUS[doc.status];
-  const hasSourceImage = doc.pageImageCount > 0;
+  const statusLabel = s.status[doc.status];
+  const statusTone = STATUS_TONE[doc.status];
+  // 이미지 영역은 공유 SOBP든 다중 페이지든 동일하게 "지금 선택된 페이지"의 원본을
+  // 보여준다 — 공유는 페이지 버튼이 형제 문서로 이동하므로 항상 그 문서의 0번, 다중
+  // 페이지는 selectedPage에 맞는 인덱스를 그대로 쓴다(2026-08-25).
+  const hasSourceImage = doc.pageImageCount > selectedPage - 1;
   const processed = doc.fieldValues.length > 0;
+  const shared = doc.siblings.length > 1;
 
-  const steps: { label: string; state: "done" | "active" | "pending" }[] = [
-    { label: "필기 수신", state: doc.status === "printed" ? "active" : "done" },
-    {
-      label: "OCR 결과 확인",
-      state: doc.status === "confirmed" ? "done" : processed || doc.status === "received" || doc.status === "processing" || doc.status === "error" ? "active" : "pending",
-    },
-    { label: "최종 확정", state: doc.status === "confirmed" ? "done" : "pending" },
-  ];
+  // 페이지/SOBP 바는 공유·다중 페이지 화면·조작이 동일하다 — 차이는 이 값들뿐이다:
+  // 공유는 페이지 하나하나가 실제로는 다른 문서라 이동이 곧 문서 이동이고, SOBP도 전
+  // 페이지가 같다(공유의 정의). 다중 페이지는 한 문서 안에서 페이지별 SOBP만 다르다.
+  const totalPages = shared ? doc.siblings.length : doc.templateVersion.pageCount;
+  const groupPageNo = shared ? Math.max(1, doc.siblings.findIndex((sib) => sib.id === documentId) + 1) : selectedPage;
+  const sobpValue = shared ? (doc.ncode ?? "—") : (doc.pageNcodes[selectedPage - 1] ?? doc.ncode ?? "—");
+  function goToPage(n: number) {
+    const target = Math.min(totalPages, Math.max(1, n));
+    if (shared) {
+      const sib = doc!.siblings[target - 1];
+      if (sib && sib.id !== documentId) router.push(`/documents/${sib.id}`);
+    } else {
+      setSelectedPage(target);
+    }
+  }
 
   // 처리 전(fieldValues 없음)에는 템플릿 필드 구조로, 처리 후에는 실제 fieldValues로 행을 만든다.
   const rows: { key: string; label: string; required: boolean; dataKey: string; type: FieldType; value: DocumentDetailDTO["fieldValues"][number] | null }[] = processed
@@ -248,7 +390,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
         const source = v.field ?? v.repeatColumn;
         return {
           key: v.id,
-          label: source ? `${source.label}${v.rowIndex !== null ? ` [행 ${v.rowIndex + 1}]` : ""}` : "-",
+          label: source ? s.rowLabel(source.label, v.rowIndex) : "-",
           required: source?.required ?? false,
           dataKey: source?.dataKey ?? "-",
           type: source?.type ?? "text",
@@ -265,17 +407,6 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
       }));
 
   const rowStatuses = new Map(rows.map((r) => [r.key, r.value ? rowStatusOf(r.value) : "pending"]));
-  const reviewCounts = {
-    all: rows.length,
-    done: rows.filter((r) => rowStatuses.get(r.key) === "done").length,
-    review: rows.filter((r) => rowStatuses.get(r.key) === "review").length,
-    issue: rows.filter((r) => rowStatuses.get(r.key) === "issue").length,
-  };
-  const filteredRows = rows.filter((r) => {
-    if (reviewFilter === "review") return rowStatuses.get(r.key) === "review";
-    if (reviewFilter === "issue") return rowStatuses.get(r.key) === "issue";
-    return true;
-  });
 
   // 실제 CSV/Excel 다운로드는 항상 finalValue(확정값)만 쓴다(confirmedJson.ts) — 그건
   // 안전장치라 그대로 둔다. 다만 이 미리보기는 확정 전이면 항상 텅 비어 보여서 "CSV
@@ -286,9 +417,8 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
     sample: r.value?.finalValue ?? r.value?.normalizedValue ?? r.value?.rawOcrValue ?? "",
     confirmed: r.value?.finalValue != null,
   }));
-  const jsonPreview = JSON.stringify(Object.fromEntries(rows.map((r) => [r.dataKey, r.value?.finalValue ?? null])), null, 2);
 
-  const boxedFieldValues = processed ? doc.fieldValues.filter((v) => v.field && v.field.pageNo === 1) : [];
+  const boxedFieldValues = processed ? doc.fieldValues.filter((v) => v.field && v.field.pageNo === selectedPage) : [];
 
   const canRerunOcr = doc.status === "received" || doc.status === "error";
 
@@ -300,139 +430,150 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
   return (
     <div className="h-full box-border bg-[#eef2f6] py-[22px] px-[max(24px,calc((100%-1680px)/2))] overflow-auto">
       <div className="mx-auto w-full max-w-[1680px] h-full min-h-[560px] flex flex-col rounded-xl border border-[#d9e1e9] bg-white shadow-[0_8px_24px_rgba(32,54,78,0.07)] overflow-hidden">
-        {/* 상단 액션 바 — 문서명/상태/AI OCR 실행/JSON/CSV/Excel/최종 확정 */}
+        {/* 상단 액션 바 — 이전 화면 / 문서명·상태 / AI OCR 실행/CSV/Excel/최종 확정 */}
         <div className="shrink-0 flex items-center gap-3 px-5 py-3 border-b border-[var(--color-border)]">
+          <button
+            onClick={() => router.push("/documents")}
+            className="text-sm text-slate-400 hover:text-[var(--foreground)] px-1.5 py-1 rounded cursor-pointer"
+          >
+            {s.back}
+          </button>
           <div>
             <div className="text-xs text-slate-400 tracking-wide">DOCUMENT DETAIL</div>
             <h1 className="text-lg font-semibold text-[var(--foreground)]">{doc.templateVersion.template.name}</h1>
           </div>
-          <Badge tone={status.tone}>{status.label}</Badge>
+          <Badge tone={statusTone}>{statusLabel}</Badge>
           <div className="flex-1" />
           <div className="flex items-center gap-2">
             {doc.status === "printed" && (
               <ButtonLabel variant="primary" className={busy !== null ? "opacity-50 pointer-events-none" : ""}>
-                {busy === "import" ? "이미지 업로드 중…" : busy === "process" ? "AI 처리 중… (최대 2분)" : "+ AI OCR 실행"}
+                {busy === "import" ? s.uploadingImage : busy === "process" ? s.processingAi : s.runOcr}
                 <input type="file" accept="image/*" className="hidden" onChange={importAndRunOcr} disabled={busy !== null} />
               </ButtonLabel>
             )}
             {canRerunOcr && (
               <Button variant="primary" onClick={() => runAction("process")} disabled={busy !== null}>
-                {busy === "process" ? "AI 처리 중… (최대 2분)" : "+ AI OCR 실행"}
+                {busy === "process" ? s.processingAi : s.runOcr}
               </Button>
             )}
-            <Button onClick={() => setShowJson((v) => !v)} disabled={!processed}>
-              JSON
-            </Button>
-            <Button
-              disabled={!processed || busy !== null}
-              onClick={async () => {
-                setBusy("export-csv");
-                const err = await downloadExport("csv", [documentId]);
-                if (err) setActionError(err);
-                setBusy(null);
-              }}
-            >
-              CSV
-            </Button>
-            <Button
-              disabled={!processed || busy !== null}
-              onClick={async () => {
-                setBusy("export-excel");
-                const err = await downloadExport("excel", [documentId]);
-                if (err) setActionError(err);
-                setBusy(null);
-              }}
-            >
-              Excel
-            </Button>
+            {shared ? (
+              <a href={`/api/documents/${documentId}/zip?format=raw`}>
+                <Button>{s.pdf}</Button>
+              </a>
+            ) : (
+              <a href={`/api/templates/${doc.templateVersion.template.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                <Button>{s.pdf}</Button>
+              </a>
+            )}
+            {shared ? (
+              <a href={`/api/documents/${documentId}/zip?format=csv`}>
+                <Button>{s.csv}</Button>
+              </a>
+            ) : (
+              <Button
+                disabled={!processed || busy !== null}
+                onClick={async () => {
+                  setBusy("export-csv");
+                  const err = await downloadExport("csv", [documentId]);
+                  if (err) setActionError(err);
+                  setBusy(null);
+                }}
+              >
+                {s.csv}
+              </Button>
+            )}
+            {shared ? (
+              <a href={`/api/documents/${documentId}/zip?format=excel`}>
+                <Button>{s.excel}</Button>
+              </a>
+            ) : (
+              <Button
+                disabled={!processed || busy !== null}
+                onClick={async () => {
+                  setBusy("export-excel");
+                  const err = await downloadExport("excel", [documentId]);
+                  if (err) setActionError(err);
+                  setBusy(null);
+                }}
+              >
+                {s.excel}
+              </Button>
+            )}
             {doc.status === "review_required" ? (
               <Button variant="primary" onClick={() => runAction("confirm")} disabled={busy !== null}>
-                최종 확정
+                {s.confirmFinal}
               </Button>
-            ) : doc.status === "confirmed" ? (
-              <Button onClick={() => setShowReopen(true)}>재검수 열기</Button>
-            ) : (
-              <Button disabled>최종 확정</Button>
-            )}
+            ) : doc.status !== "confirmed" ? (
+              <Button disabled>{s.confirmFinal}</Button>
+            ) : null}
             {DEMO_MODE && hasSourceImage && (
-              <Button onClick={() => runAction("demo-reprocess")} disabled={busy !== null} title="데모 전용 — 상태와 무관하게 AI OCR을 다시 돌립니다">
-                {busy === "demo-reprocess" ? "다시 실행 중…" : "↻ 다시 실행 (데모)"}
+              <Button onClick={() => runAction("demo-reprocess")} disabled={busy !== null} title={s.demoTitle}>
+                {busy === "demo-reprocess" ? s.demoRerunning : s.demoRerun}
               </Button>
             )}
           </div>
         </div>
 
-        <div className="shrink-0 flex items-center gap-1.5 text-xs px-5 py-2 border-b border-[var(--color-border)]">
-          <span className="text-slate-300 font-mono mr-1">{doc.ncode}</span>
-          {steps.map((s, i) => (
-            <div key={s.label} className="flex items-center gap-1.5">
-              <span
-                className={`rounded-full px-2 py-0.5 ${
-                  s.state === "done"
-                    ? "bg-[var(--color-status-green-bg)] text-[var(--color-status-green-fg)] font-medium"
-                    : s.state === "active"
-                      ? "bg-[var(--color-brand-50)] text-[var(--color-brand-700)] font-medium"
-                      : "text-slate-400"
-                }`}
-              >
-                {i + 1} {s.label}
-              </span>
-              {i < steps.length - 1 && <span className="text-slate-300">—</span>}
-            </div>
-          ))}
-        </div>
+        {/* 페이지/SOBP 바 — 공유 SOBP든 양식 자체가 다중 페이지든 같은 화면·같은 조작으로
+            보여준다(사용자 지적, 2026-08-25: "같은 화면 같은 기능인데 왜 다르게 표시하냐").
+            No. 선택 + 이전/다음으로 넘기고 그 페이지의 SOBP만 보여준다. 차이는 내부적으로만:
+            공유는 페이지 하나하나가 실제로는 다른 문서라 페이지 이동이 곧 문서 이동이고,
+            SOBP 값은 전 페이지가 동일(공유의 정의상)하다. 단일 페이지 문서는 SOBP 배지 하나만. */}
+        {shared || doc.templateVersion.pageCount > 1 ? (
+          <div className="shrink-0 flex items-center gap-2 px-5 py-2 border-b border-[var(--color-border)] bg-slate-50 flex-wrap text-xs">
+            <span className="text-slate-400">{s.pagePanelTitle}</span>
+            <button
+              onClick={() => goToPage(groupPageNo - 1)}
+              disabled={groupPageNo <= 1}
+              title={s.pagePrev}
+              className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            >
+              ‹
+            </button>
+            <span className="text-slate-400">{s.pagePanelNo}</span>
+            <select
+              value={groupPageNo}
+              onChange={(e) => goToPage(Number(e.target.value))}
+              className="rounded border border-[var(--color-border)] bg-white px-1.5 py-1"
+            >
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => goToPage(groupPageNo + 1)}
+              disabled={groupPageNo >= totalPages}
+              title={s.pageNext}
+              className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+            >
+              ›
+            </button>
+            <span className="text-slate-400 ml-2">{s.pagePanelAddress}</span>
+            <span className="font-mono text-slate-600">{sobpValue}</span>
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center px-5 py-2 border-b border-[var(--color-border)] bg-slate-50">
+            <span className="text-xs rounded-full px-2.5 py-1 font-medium bg-[var(--color-brand-600)] text-white font-mono">{doc.ncode}</span>
+          </div>
+        )}
 
         {actionError && (
           <p className="shrink-0 text-sm text-red-600 bg-red-50 border-b border-red-200 px-5 py-2">{actionError}</p>
         )}
 
-        {showReopen && (
-          <div className="shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-[var(--color-border)] bg-slate-50">
-            <Input
-              className="flex-1"
-              placeholder="재검수 사유"
-              value={reopenReason}
-              onChange={(e) => setReopenReason(e.target.value)}
-            />
-            <Button
-              variant="primary"
-              onClick={async () => {
-                if (!reopenReason.trim()) return;
-                await runAction("reopen", { reason: reopenReason });
-                setShowReopen(false);
-                setReopenReason("");
-              }}
-            >
-              확인
-            </Button>
-            <Button onClick={() => setShowReopen(false)}>취소</Button>
-          </div>
-        )}
 
         {/* 본문 — 좌 45%(작성 원본) : 우 55%(인식된 필드값 58% + CSV 자동 생성 42%) */}
         <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "45% 55%", gridTemplateRows: "minmax(0, 1fr)" }}>
           <section className="min-w-0 flex flex-col bg-[#e8edf2] border-r border-[var(--color-border)]">
-            <div className="shrink-0 flex items-center justify-between px-3.5 py-2.5 bg-white border-b border-[#e1e6eb]">
-              <div>
-                <div className="text-sm font-semibold text-[var(--foreground)]">
-                  {hasSourceImage ? "작성 원본" : doc.status === "printed" ? "작성 원본 대기 중" : templatePdfBuffer ? "빈 원본 양식" : "작성 원본"}
-                </div>
-                <div className="text-xs text-slate-400 mt-0.5">
-                  {hasSourceImage
-                    ? "스마트펜 필기 원본 · 1페이지"
-                    : doc.status === "printed"
-                      ? "필기 이미지를 업로드하면 여기에 원본이 표시됩니다"
-                      : templatePdfBuffer
-                        ? "아직 필기 이미지가 없어 양식 원본을 보여줍니다 · 1페이지"
-                        : "작성 원본 이미지가 없습니다"}
-                </div>
-              </div>
-              {(hasSourceImage || (templatePdfBuffer && doc.status !== "printed")) && (
+            <div className="shrink-0 flex items-center justify-end px-3.5 py-2.5 bg-white border-b border-[#e1e6eb]">
+              {(hasSourceImage || templatePdfBuffer) && (
                 <div className="flex items-center gap-1.5">
                   <button
                     className="border border-[#cbd6e2] rounded bg-white px-2 py-1.5 text-sm text-[#47627f] cursor-pointer"
                     onClick={() => setZoom((z) => Math.max(30, z - 5))}
-                    title="축소"
+                    title={s.zoomOut}
                   >
                     −
                   </button>
@@ -440,16 +581,10 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                   <button
                     className="border border-[#cbd6e2] rounded bg-white px-2 py-1.5 text-sm text-[#47627f] cursor-pointer"
                     onClick={() => setZoom((z) => Math.min(200, z + 5))}
-                    title="확대"
+                    title={s.zoomIn}
                   >
                     ＋
                   </button>
-                  {doc.status === "printed" && (
-                    <ButtonLabel variant="primary">
-                      ↑ 원본 업로드
-                      <input type="file" accept="image/*" className="hidden" onChange={importFile} disabled={busy !== null} />
-                    </ButtonLabel>
-                  )}
                 </div>
               )}
             </div>
@@ -473,8 +608,8 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- 사용자가 올린 원본 스캔 이미지, next/image 최적화 대상 아님 */}
                     <img
-                      src={`/api/documents/${documentId}/page-image/0?v=${encodeURIComponent(doc.receivedAt ?? "")}`}
-                      alt="작성 원본"
+                      src={`/api/documents/${documentId}/page-image/${selectedPage - 1}?v=${encodeURIComponent(doc.receivedAt ?? "")}`}
+                      alt={s.sourceAlt}
                       className="block w-full h-auto bg-white"
                       draggable={false}
                     />
@@ -501,27 +636,16 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                       ))}
                     </div>
                   </div>
-                ) : doc.status === "printed" ? (
-                  // "빈 양식 미리보기"는 점선 박스만 떠 있어 렌더링이 깨진 것처럼 보인다는
-                  // 피드백(2026-08-20)으로, 검토할 내용이 없는 이 상태에선 미리보기 대신
-                  // 명확한 업로드 유도 화면만 보여준다.
-                  <div className="w-full max-w-md flex flex-col items-center justify-center gap-4 bg-white text-center shrink-0 rounded-xl border border-dashed border-[#c7d2de] py-16 px-8">
-                    <span className="text-4xl">✎</span>
-                    <div>
-                      <p className="text-sm font-medium text-[var(--foreground)]">아직 필기 이미지가 없습니다</p>
-                      <p className="text-xs text-slate-400 mt-1">스마트펜으로 작성한 필기 이미지를 업로드하면 AI OCR을 바로 실행할 수 있습니다.</p>
-                    </div>
-                    <ButtonLabel variant="primary" className={busy !== null ? "opacity-50 pointer-events-none" : ""}>
-                      {busy === "import" ? "이미지 업로드 중…" : busy === "process" ? "AI 처리 중… (최대 2분)" : "↑ 필기 이미지 업로드 + AI OCR 실행"}
-                      <input type="file" accept="image/*" className="hidden" onChange={importAndRunOcr} disabled={busy !== null} />
-                    </ButtonLabel>
-                  </div>
                 ) : templatePdfBuffer ? (
+                  // 2026-08-25: "인쇄됨" 상태도 업로드 유도 화면 대신 양식 원본 PDF를 그대로
+                  // 보여준다 — 어떤 양식인지 바로 확인하고, 업로드는 위 툴바 버튼으로 한다
+                  // (사용자 결정 — 이전의 "점선 박스만 떠서 깨져 보인다"는 2026-08-20 피드백을
+                  // 뒤집음).
                   <div className="relative bg-white shadow-[0_12px_34px_rgba(34,51,72,0.21)] shrink-0">
-                    <PdfPageCanvas pdfBuffer={templatePdfBuffer} pageNo={1} width={Math.round(sourcePanelWidth * (zoom / 100))} onSize={setTemplatePdfSize} />
+                    <PdfPageCanvas pdfBuffer={templatePdfBuffer} pageNo={selectedPage} width={Math.round(sourcePanelWidth * (zoom / 100))} onSize={setTemplatePdfSize} />
                     <div className="absolute inset-0 z-[5]">
                       {doc.templateVersion.fields
-                        .filter((f) => f.pageNo === 1)
+                        .filter((f) => f.pageNo === selectedPage)
                         .map((f) => (
                           <div
                             key={f.id}
@@ -535,15 +659,15 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                 ) : (
                   <div className="w-[380px] h-[540px] flex flex-col items-center justify-center gap-3 bg-white text-center shrink-0">
                     <span className="text-3xl">📄</span>
-                    <p className="text-xs text-slate-500 px-6">작성 원본 이미지가 없습니다.</p>
+                    <p className="text-xs text-slate-500 px-6">{s.noSourceImage}</p>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="shrink-0 h-8 flex items-center justify-between px-3 bg-white border-t border-[#dce2e8] text-xs text-[#657487]">
-              <span>◱ 오른쪽 필드값을 누르면 원본 위치가 표시됩니다.</span>
-              <span className="text-[#8a96a3]">JPG · PNG · 단일 페이지 PDF</span>
+              <span>{s.sourceHint}</span>
+              <span className="text-[#8a96a3]">{s.sourceFormats}</span>
             </div>
           </section>
 
@@ -552,8 +676,8 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
             <section className="min-h-0 flex flex-col overflow-hidden bg-[#f8fafb]">
               <div className="shrink-0 flex items-center justify-between px-3.5 py-2.5 border-b border-[#e1e6eb] bg-white">
                 <div>
-                  <div className="text-sm font-semibold text-[var(--foreground)]">인식된 필드값</div>
-                  <div className="text-xs text-slate-400 mt-0.5">OCR 결과를 확인·수정한 후 최종 확정합니다.</div>
+                  <div className="text-sm font-semibold text-[var(--foreground)]">{s.recognizedFields}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{s.recognizedFieldsDesc}</div>
                 </div>
                 {canRerunOcr && (
                   <button
@@ -561,41 +685,12 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                     onClick={() => runAction("process")}
                     disabled={busy !== null}
                   >
-                    ↻ OCR 다시 실행
+                    {s.rerunOcr}
                   </button>
                 )}
               </div>
-              <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-[#e1e6eb] bg-white flex-wrap gap-1.5">
-                <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                  <span className="rounded-full px-2 py-1 bg-[#f1f4f7] text-[#687687]">
-                    전체 <b className="text-[var(--foreground)]">{reviewCounts.all}</b>
-                  </span>
-                  <span className="rounded-full px-2 py-1 bg-[#eaf8f2] text-[#147857]">
-                    완료 <b>{reviewCounts.done}</b>
-                  </span>
-                  <span className="rounded-full px-2 py-1 bg-[#fff5d9] text-[#9a6b00]">
-                    확인 필요 <b>{reviewCounts.review}</b>
-                  </span>
-                  <span className="rounded-full px-2 py-1 bg-[#ffeded] text-[#b34040]">
-                    미입력·오류 <b>{reviewCounts.issue}</b>
-                  </span>
-                </div>
-                <div className="flex gap-1">
-                  {(["all", "review", "issue"] as const).map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setReviewFilter(f)}
-                      className={`text-xs rounded-full px-2 py-1 font-medium cursor-pointer ${
-                        reviewFilter === f ? "bg-[#172842] text-white" : "text-[#7d8996] hover:bg-slate-100"
-                      }`}
-                    >
-                      {f === "all" ? "전체" : f === "review" ? "확인 필요" : "미입력·오류"}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[#e4e8ec]">
-                {filteredRows.map((r) => (
+                {rows.map((r) => (
                   <FieldRow
                     key={r.key}
                     row={r}
@@ -605,20 +700,17 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                     onFocus={() => focusKey(r.key)}
                   />
                 ))}
-                {filteredRows.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">해당하는 필드가 없습니다.</p>}
+                {rows.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">{s.noRows}</p>}
               </div>
-              {showJson && (
-                <pre className="shrink-0 max-h-32 overflow-auto bg-slate-900 text-slate-100 text-[10px] p-3 leading-relaxed">{jsonPreview}</pre>
-              )}
             </section>
 
             <section className="min-h-0 min-w-0 flex flex-col overflow-hidden bg-white border-t border-[#dce2e8]">
               <div className="shrink-0 flex items-center justify-between px-3.5 py-2.5 border-b border-[#e1e6eb]">
                 <div>
-                  <div className="text-sm font-semibold text-[var(--foreground)]">CSV 자동 생성</div>
-                  <div className="text-xs text-slate-400 mt-0.5">데이터 키가 열 이름으로 사용됩니다.</div>
+                  <div className="text-sm font-semibold text-[var(--foreground)]">{s.csvAutoGen}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{s.csvAutoGenDesc}</div>
                 </div>
-                <span className="text-xs text-[#1768d7]">{csvEntries.length}개 열 · 1건</span>
+                <span className="text-xs text-[#1768d7]">{s.csvColumnsCount(csvEntries.length)}</span>
               </div>
               <div className="flex-1 min-h-0 min-w-0 m-3 flex flex-col border border-[#dbe1e7] rounded-md overflow-hidden">
                 <div
@@ -641,7 +733,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                         <td
                           key={e.key}
                           className={`px-3 py-2 whitespace-nowrap ${e.confirmed ? "text-slate-700 bg-white" : "text-slate-400 italic bg-amber-50/60"}`}
-                          title={e.sample && !e.confirmed ? "AI 인식값 미리보기 — 아직 확정 전이라 다운로드에는 포함되지 않습니다" : undefined}
+                          title={e.sample && !e.confirmed ? s.csvPreviewTitle : undefined}
                         >
                           {e.sample || "—"}
                         </td>
@@ -654,26 +746,13 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                   <CsvHorizontalScrollbar containerRef={csvScrollRef} metrics={csvScrollMetrics} />
                 )}
               </div>
-              <div className="shrink-0 flex items-center gap-1.5 px-3.5 pb-2.5 text-xs text-[#197c5d]">
-                <span className="rounded-full px-2 py-1 bg-[#ecf8f3]">✓ UTF-8 BOM</span>
-                <span className="rounded-full px-2 py-1 bg-[#ecf8f3]">✓ 일본어 지원</span>
-                <span className="rounded-full px-2 py-1 bg-[#ecf8f3]">✓ 확정값 기준</span>
-                {csvEntries.some((e) => e.sample && !e.confirmed) && (
-                  <span className="text-slate-400">회색 기울임 = AI 인식값(미확정, 다운로드 미포함)</span>
-                )}
-              </div>
+              {csvEntries.some((e) => e.sample && !e.confirmed) && (
+                <div className="shrink-0 px-3.5 pb-2.5 text-xs text-slate-400">{s.csvGrayHint}</div>
+              )}
             </section>
           </div>
         </div>
 
-        <div className="shrink-0 flex items-center gap-3 px-5 py-2.5 border-t border-[var(--color-border)] bg-white">
-          <Button onClick={() => router.push("/documents")}>← 이전 화면으로</Button>
-          {!processed && <span className="text-xs text-slate-400">AI OCR을 실행하면 인식된 값이 여기에 적용됩니다.</span>}
-          <div className="flex-1" />
-          <Link href="/documents" className="text-xs text-slate-400 hover:underline">
-            문서 조회 전체 →
-          </Link>
-        </div>
       </div>
     </div>
   );
@@ -692,11 +771,13 @@ function FieldRow({
   onSave: (id: string, finalValue: string | null) => void;
   onFocus: () => void;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   // 아직 최종 확정 전(finalValue 없음)이면 AI가 읽은 값(normalizedValue → rawOcrValue
   // 순으로)을 먼저 보여준다 — 검수 화면인데 인식값이 안 보이면 뭘 확인하라는 건지
   // 알 수 없다.
   const [local, setLocal] = useState(row.value?.finalValue ?? row.value?.normalizedValue ?? row.value?.rawOcrValue ?? "");
-  const meta = ROW_STATUS_META[status];
+  const meta = { label: s.rowStatus[status], className: ROW_STATUS_CLASS[status] };
   const disabled = !row.value;
 
   return (
@@ -720,12 +801,12 @@ function FieldRow({
           {row.required && <span className="text-red-500"> *</span>}
         </div>
         <div className="text-xs text-slate-400 font-mono truncate">
-          {row.dataKey} · {FIELD_TYPE_LABEL[row.type]}
+          {row.dataKey} · {s.fieldType[row.type]}
         </div>
       </div>
       <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
         {!row.value ? (
-          <Input className="w-full" placeholder={placeholderFor(row.type)} disabled />
+          <Input className="w-full" placeholder={placeholderFor(row.type, s)} disabled />
         ) : row.type === "check" ? (
           <Select
             className="w-full"
@@ -735,7 +816,7 @@ function FieldRow({
               onSave(row.value!.id, e.target.value || null);
             }}
           >
-            <option value="">(미기재)</option>
+            <option value="">{s.unset}</option>
             <option value="true">true</option>
             <option value="false">false</option>
           </Select>
@@ -768,6 +849,7 @@ function FieldRow({
               setLocal(v);
               onSave(row.value!.id, v || null);
             }}
+            s={s}
           />
         ) : (
           <Input
@@ -782,7 +864,7 @@ function FieldRow({
       <span className="sr-only">{disabled}</span>
       {row.value && row.value.reviewReasons.length > 0 && (
         <div className="text-xs text-[var(--color-status-amber-fg)] bg-[#fff7df] rounded px-2 py-1" style={{ gridColumn: "1 / 4" }}>
-          {row.value.reviewReasons.map((r) => REASON_LABEL[r] ?? r).join(", ")}
+          {row.value.reviewReasons.map((r) => s.reason[r] ?? r).join(", ")}
         </div>
       )}
     </div>
@@ -844,10 +926,10 @@ function CsvHorizontalScrollbar({
   );
 }
 
-function placeholderFor(type: FieldType): string {
-  if (type === "date") return "년.월.일.";
-  if (type === "time") return "--:--";
-  if (type === "number") return "0";
+function placeholderFor(type: FieldType, s: Strings): string {
+  if (type === "date") return s.placeholders.date;
+  if (type === "time") return s.placeholders.time;
+  if (type === "number") return s.placeholders.number;
   return "";
 }
 
@@ -856,17 +938,19 @@ function ChoiceValueInput({
   mode,
   value,
   onChange,
+  s,
 }: {
   options: string[];
   mode: "single" | "multiple";
   value: string;
   onChange: (v: string) => void;
+  s: Strings;
 }) {
-  const selected = value ? value.split(",").map((s) => s.trim()) : [];
+  const selected = value ? value.split(",").map((part) => part.trim()) : [];
   if (mode === "single") {
     return (
       <Select className="w-full" value={value} onChange={(e) => onChange(e.target.value)}>
-        <option value="">(미기재)</option>
+        <option value="">{s.unset}</option>
         {options.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -883,20 +967,20 @@ function ChoiceValueInput({
             type="checkbox"
             checked={selected.includes(o)}
             onChange={(e) => {
-              const next = e.target.checked ? [...selected, o] : selected.filter((s) => s !== o);
+              const next = e.target.checked ? [...selected, o] : selected.filter((part) => part !== o);
               onChange(next.join(", "));
             }}
           />
           {o}
         </label>
       ))}
-      {options.length === 0 && <span className="text-xs text-slate-400">선택지가 정의되지 않았습니다.</span>}
+      {options.length === 0 && <span className="text-xs text-slate-400">{s.noChoiceOptions}</span>}
     </div>
   );
 }
 
-function describeError(json: { error?: string }): string {
-  if (json.error === "INVALID_TRANSITION") return "지금 상태에서는 이 동작을 할 수 없습니다.";
-  if (json.error === "VALIDATION_FAILED") return "확인이 필요한 값이 남아 있어 확정할 수 없습니다. 아래 표에서 강조된 항목을 채우세요.";
-  return "작업을 처리하지 못했습니다.";
+function describeError(json: { error?: string }, s: Strings): string {
+  if (json.error === "INVALID_TRANSITION") return s.errors.invalidTransition;
+  if (json.error === "VALIDATION_FAILED") return s.errors.validationFailed;
+  return s.errors.generic;
 }

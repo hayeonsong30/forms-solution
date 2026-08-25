@@ -6,7 +6,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/templates/[temp
   const { templateId } = await ctx.params;
   try {
     const { template, version } = await getCurrentVersion(templateId);
-    const [fields, repeatGroups] = await Promise.all([
+    const [fields, repeatGroups, printedCount] = await Promise.all([
       // 필드 목록 기본 순서는 생성 순서가 아니라 문서 상단→하단, 좌→우 위치 순이다
       // (PRD_양식편집기_상세 §7.2: 이 순서가 CSV·JSON 열 순서의 기준이 된다).
       prisma.field.findMany({
@@ -23,11 +23,18 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/templates/[temp
           },
         },
       }),
+      // 실제로 한 매라도 인쇄(SOBP 발급)했으면 편집기에서 다시 편집할 수 없다(2026-08-25).
+      prisma.document.count({ where: { templateVersionId: version.id } }),
     ]);
     // pdfData는 수 MB짜리 base64라 상세 조회 응답에는 있는지 여부만 알려주고,
     // 실제 바이트는 /api/templates/[id]/pdf에서 따로 받는다.
     const { pdfData, ...versionRest } = version;
-    return Response.json({ template, version: { ...versionRest, hasPdf: pdfData !== null }, fields, repeatGroups });
+    return Response.json({
+      template: { ...template, printedCount },
+      version: { ...versionRest, hasPdf: pdfData !== null },
+      fields,
+      repeatGroups,
+    });
   } catch (e) {
     if (e instanceof NotFoundError) return Response.json({ error: "NOT_FOUND" }, { status: 404 });
     throw e;

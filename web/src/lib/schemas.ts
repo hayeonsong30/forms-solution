@@ -13,8 +13,7 @@ export const fieldTypeSchema = z.enum(["text", "number", "check", "date", "time"
 export const textConfigSchema = z.object({
   writingMode: z.enum(["single", "multiline"]).default("single"),
   language: z.enum(["ja", "ko", "en", "auto"]).default("ja"),
-  charPolicy: z.enum(["all", "numeric_included", "alnum", "custom_pattern"]).default("all"),
-  customPattern: z.string().optional(),
+  charPolicy: z.enum(["all", "numeric_included", "alnum"]).default("all"),
   maxLength: z.number().int().positive().optional(),
   preserveWhitespace: z.boolean().default(false),
   preserveNewline: z.boolean().default(false),
@@ -38,10 +37,6 @@ export const checkConfigSchema = z.object({
   trueMarks: z.array(z.string()).default(["CHECK", "V"]),
   falseMarks: z.array(z.string()).default(["X"]),
   blankValue: z.enum(["false", "null", "required_error"]).default("null"),
-  ambiguousPolicy: z.enum(["always_review", "nearest_guess"]).default("always_review"),
-  regionMode: z.enum(["box", "full_area"]).default("box"),
-  // 교차 검증: ITSUWA 합격/불합격처럼 동시 true 불가 대상 필드 (PRD §4.3)
-  exclusiveWithFieldId: z.string().optional(),
   // "boolean"(기본): 어떤 기호를 썼든 true/false로 정규화. "symbol": 손으로 쓴 기호
   // (V·O·X·✓ 등) 그대로를 값으로 남긴다 — 화면·Excel 출력도 그 문자 그대로 나간다.
   outputMode: z.enum(["boolean", "symbol"]).default("boolean"),
@@ -52,13 +47,11 @@ export const checkConfigSchema = z.object({
 // 가기로 확정(2026-08-19).
 export const dateConfigSchema = z.object({
   inputFormat: z.enum(["auto", "YYYY/MM/DD", "YYYY-MM-DD", "YYYY년 MM월 DD일", "MM/DD"]).default("auto"),
-  missingYearPolicy: z.enum(["document_year", "current_year", "review_required"]).default("review_required"),
   outputFormat: z.enum(["YYYY-MM-DD", "source"]).default("YYYY-MM-DD"),
 });
 
 export const timeConfigSchema = z.object({
   inputMode: z.enum(["auto", "24h", "12h", "split_hour_minute"]).default("auto"),
-  minuteStep: z.union([z.literal("free"), z.literal(5), z.literal(10), z.literal(30)]).default("free"),
   outputFormat: z.enum(["HH:mm", "source"]).default("HH:mm"),
 });
 
@@ -67,7 +60,7 @@ export const timeConfigSchema = z.object({
 export const choiceConfigSchema = z.object({
   mode: z.enum(["single", "multiple"]).default("single"),
   conflictPolicy: z.enum(["review_required", "last_marked", "first_marked"]).default("review_required"),
-  csvPolicy: z.enum(["delimiter", "one_column_per_option", "json_string"]).default("delimiter"),
+  csvPolicy: z.enum(["delimiter", "one_column_per_option"]).default("delimiter"),
 });
 
 export const choiceOptionInputSchema = z.object({
@@ -190,6 +183,11 @@ export const createTemplateSchema = z.object({
 export const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
   status: z.enum(["draft", "printable"]).optional(),
+  printCopies: z.number().int().min(1).optional(),
+});
+
+export const updateOrgSchema = z.object({
+  name: z.string().min(1),
 });
 
 export const importDocumentSchema = z.object({

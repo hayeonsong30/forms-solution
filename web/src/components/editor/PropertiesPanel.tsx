@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ChoiceOptionDTO, FieldDTO, FieldType, RepeatGroupDTO } from "@/types";
+import { useLanguage, type Lang } from "@/lib/language";
 import { MergeToChoiceModal } from "./MergeToChoiceModal";
 import {
   CheckConfigPanel,
@@ -18,9 +19,135 @@ import {
 
 export type ChoiceOptionInput = { label: string; storedValue: string; region: { x: number; y: number; w: number; h: number } | null };
 
+const STRINGS = {
+  ko: {
+    basicInfo: {
+      sectionTitle: "기본 정보",
+      fieldName: "필드명",
+      dataKey: "데이터 키",
+      dataKeyHint: "편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.",
+      dataType: "데이터 유형",
+      types: { text: "텍스트", number: "숫자", date: "날짜", time: "시간", check: "체크 판정", choice: "선택" },
+      description: "설명",
+      requiredField: "필수 필드",
+      aiSuggested: {
+        notice: "AI가 제안한 필드입니다. 검수 후 채택하거나 거부하세요.",
+        accept: "채택",
+        reject: "거부",
+      },
+    },
+    typeConfig: { sectionTitle: "유형별 설정" },
+    choiceOptions: {
+      sectionTitle: "선택 옵션",
+      unmerge: (count: number) => `선택 해제 (개별 체크 필드 ${count}개로 복원)`,
+      labelPlaceholder: "표시명",
+      valuePlaceholder: "저장값",
+      armRegion: "캔버스에서 드래그…",
+      reassignRegion: "영역 다시 지정",
+      addRegion: "+ 영역 지정",
+      regionSet: "영역 지정됨",
+      regionUnset: "영역 미지정",
+      delete: "삭제",
+      addOption: "+ 옵션 추가",
+      newOptionLabel: (n: number) => `옵션 ${n}`,
+      newOptionValue: (n: number) => `option_${n}`,
+    },
+    position: {
+      sectionTitle: "위치·크기",
+      page: "페이지",
+      locked: "잠금 (위치·유형·데이터 키 변경 방지)",
+    },
+    deleteField: "필드 삭제",
+    group: {
+      sectionTitle: "반복행 속성",
+      groupName: "그룹명",
+      groupDataKey: "그룹 데이터 키",
+      maxRows: "최대 행 수",
+      blankRowPolicy: { label: "빈 행 처리", exclude: "빈 행 제외", include: "빈 행 포함" },
+      useRowNumber: "행 번호 사용",
+      allowDuplicate: "중복 허용",
+    },
+    columns: {
+      sectionTitle: "열 구성 (첫 행 기준, 좌→우)",
+      hint: "2개 이상 체크하면 良/否처럼 여러 영역을 하나의 선택 값으로 묶을 수 있습니다.",
+      unmerge: "해제",
+      unmergeTitle: (count: number) => `개별 체크 컬럼 ${count}개로 복원`,
+      mergeButton: (count: number) => `선택 컬럼으로 묶기 (${count})`,
+    },
+    fixedRows: {
+      sectionTitle: "행별 고정값 (PDF에 이미 인쇄된 값)",
+      hint: "No.·항목명처럼 양식에 이미 인쇄돼 있어 OCR 대상이 아닌 값. 채워두면 CSV/JSON에 그대로 출력됩니다.",
+      rowHeader: "행",
+      save: "고정값 저장",
+    },
+    ungroup: "반복행 해제 (첫 행 필드로 되돌리기)",
+  },
+  ja: {
+    basicInfo: {
+      sectionTitle: "基本情報",
+      fieldName: "フィールド名",
+      dataKey: "データキー",
+      dataKeyHint: "編集完了（印刷可能への切り替え）まで変更できます。",
+      dataType: "データ種別",
+      types: { text: "テキスト", number: "数値", date: "日付", time: "時刻", check: "チェック判定", choice: "選択" },
+      description: "説明",
+      requiredField: "必須項目",
+      aiSuggested: {
+        notice: "AIが提案したフィールドです。確認のうえ採用または却下してください。",
+        accept: "採用",
+        reject: "却下",
+      },
+    },
+    typeConfig: { sectionTitle: "種別ごとの設定" },
+    choiceOptions: {
+      sectionTitle: "選択肢",
+      unmerge: (count: number) => `選択を解除（個別チェックフィールド${count}個に戻す）`,
+      labelPlaceholder: "表示名",
+      valuePlaceholder: "保存値",
+      armRegion: "キャンバスでドラッグ…",
+      reassignRegion: "領域を再指定",
+      addRegion: "+ 領域を指定",
+      regionSet: "領域指定済み",
+      regionUnset: "領域未指定",
+      delete: "削除",
+      addOption: "+ 選択肢を追加",
+      newOptionLabel: (n: number) => `選択肢${n}`,
+      newOptionValue: (n: number) => `option_${n}`,
+    },
+    position: {
+      sectionTitle: "位置・サイズ",
+      page: "ページ",
+      locked: "ロック（位置・種別・データキーの変更を防止）",
+    },
+    deleteField: "フィールドを削除",
+    group: {
+      sectionTitle: "繰り返し行の設定",
+      groupName: "グループ名",
+      groupDataKey: "グループデータキー",
+      maxRows: "最大行数",
+      blankRowPolicy: { label: "空行の扱い", exclude: "空行を除外", include: "空行を含める" },
+      useRowNumber: "行番号を使用",
+      allowDuplicate: "重複を許可",
+    },
+    columns: {
+      sectionTitle: "列構成（1行目基準、左→右）",
+      hint: "2つ以上チェックすると、良/否のように複数の領域を1つの選択値としてまとめられます。",
+      unmerge: "解除",
+      unmergeTitle: (count: number) => `個別チェック列${count}個に戻す`,
+      mergeButton: (count: number) => `選択列をまとめる（${count}）`,
+    },
+    fixedRows: {
+      sectionTitle: "行別固定値（PDFに既に印刷されている値）",
+      hint: "No.・項目名のように様式に既に印刷されておりOCR対象外の値。入力しておくとCSV/JSONにそのまま出力されます。",
+      rowHeader: "行",
+      save: "固定値を保存",
+    },
+    ungroup: "繰り返し行を解除（1行目のフィールドに戻す）",
+  },
+} satisfies Record<Lang, unknown>;
+
 export function FieldPropertiesPanel({
   field,
-  otherCheckFields,
   onPatchLocal,
   onSave,
   onSaveType,
@@ -34,7 +161,6 @@ export function FieldPropertiesPanel({
   onSplitChoice,
 }: {
   field: FieldDTO;
-  otherCheckFields: FieldDTO[];
   onPatchLocal: (patch: Partial<FieldDTO>) => void;
   onSave: (body: Record<string, unknown>) => void;
   onSaveType: (type: FieldType) => void;
@@ -50,10 +176,12 @@ export function FieldPropertiesPanel({
   armedOptionIndex: number | null;
   onSplitChoice?: () => void;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   return (
     <div className="divide-y">
-      <Section title="기본 정보">
-        <Field label="필드명">
+      <Section title={s.basicInfo.sectionTitle}>
+        <Field label={s.basicInfo.fieldName}>
           <input
             className={inputClass}
             value={field.label}
@@ -62,7 +190,7 @@ export function FieldPropertiesPanel({
             onBlur={() => onSave({ label: field.label })}
           />
         </Field>
-        <Field label="데이터 키">
+        <Field label={s.basicInfo.dataKey}>
           <input
             className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
             value={field.dataKey}
@@ -70,19 +198,19 @@ export function FieldPropertiesPanel({
             onChange={(e) => onPatchLocal({ dataKey: e.target.value })}
             onBlur={() => onSave({ dataKey: field.dataKey })}
           />
-          <p className="text-[11px] text-slate-400 mt-1">편집 완료(인쇄 가능 전환) 전까지만 수정할 수 있습니다.</p>
+          <p className="text-[11px] text-slate-400 mt-1">{s.basicInfo.dataKeyHint}</p>
         </Field>
-        <Field label="데이터 유형">
+        <Field label={s.basicInfo.dataType}>
           <select className={inputClass} value={field.type} disabled={field.locked} onChange={(e) => onSaveType(e.target.value as FieldType)}>
-            <option value="text">텍스트</option>
-            <option value="number">숫자</option>
-            <option value="date">날짜</option>
-            <option value="time">시간</option>
-            <option value="check">체크 판정</option>
-            <option value="choice">선택</option>
+            <option value="text">{s.basicInfo.types.text}</option>
+            <option value="number">{s.basicInfo.types.number}</option>
+            <option value="date">{s.basicInfo.types.date}</option>
+            <option value="time">{s.basicInfo.types.time}</option>
+            <option value="check">{s.basicInfo.types.check}</option>
+            <option value="choice">{s.basicInfo.types.choice}</option>
           </select>
         </Field>
-        <Field label="설명">
+        <Field label={s.basicInfo.description}>
           <textarea
             className={inputClass}
             rows={2}
@@ -100,28 +228,28 @@ export function FieldPropertiesPanel({
               onSave({ required: e.target.checked });
             }}
           />
-          필수 필드
+          {s.basicInfo.requiredField}
         </label>
         {field.status === "suggested" && (
           <div className="bg-violet-50 border border-violet-200 rounded p-2 space-y-2">
-            <p className="text-xs text-violet-700">AI가 제안한 필드입니다. 검수 후 채택하거나 거부하세요.</p>
+            <p className="text-xs text-violet-700">{s.basicInfo.aiSuggested.notice}</p>
             <div className="flex gap-2">
               <button className="text-sm bg-violet-600 text-white rounded px-3 py-1 flex-1" onClick={onAccept}>
-                채택
+                {s.basicInfo.aiSuggested.accept}
               </button>
               <button className="text-sm border border-violet-300 text-violet-700 rounded px-3 py-1 flex-1" onClick={onReject}>
-                거부
+                {s.basicInfo.aiSuggested.reject}
               </button>
             </div>
           </div>
         )}
       </Section>
 
-      <Section title="유형별 설정">
+      <Section title={s.typeConfig.sectionTitle}>
         {field.type === "text" && <TextConfigPanel value={field.config.text} onChange={(patch) => onPatchConfig("text", patch)} />}
         {field.type === "number" && <NumberConfigPanel value={field.config.number} onChange={(patch) => onPatchConfig("number", patch)} />}
         {field.type === "check" && (
-          <CheckConfigPanel value={field.config.check} otherCheckFields={otherCheckFields} onChange={(patch) => onPatchConfig("check", patch)} />
+          <CheckConfigPanel value={field.config.check} onChange={(patch) => onPatchConfig("check", patch)} />
         )}
         {field.type === "date" && <DateConfigPanel value={field.config.date} onChange={(patch) => onPatchConfig("date", patch)} />}
         {field.type === "time" && <TimeConfigPanel value={field.config.time} onChange={(patch) => onPatchConfig("time", patch)} />}
@@ -129,7 +257,7 @@ export function FieldPropertiesPanel({
       </Section>
 
       {field.type === "choice" && (
-        <Section title="선택 옵션">
+        <Section title={s.choiceOptions.sectionTitle}>
           <ChoiceOptionsPanel
             fieldId={field.id}
             options={field.choiceOptions}
@@ -142,20 +270,20 @@ export function FieldPropertiesPanel({
               className="text-sm border border-[var(--color-border)] rounded-lg px-3 py-1.5 w-full text-slate-600 cursor-pointer mt-2"
               onClick={onSplitChoice}
             >
-              선택 해제 (개별 체크 필드 {field.choiceOptions.length}개로 복원)
+              {s.choiceOptions.unmerge(field.choiceOptions.length)}
             </button>
           )}
         </Section>
       )}
 
-      <Section title="위치·크기">
+      <Section title={s.position.sectionTitle}>
         <div className="grid grid-cols-2 gap-2">
           <PercentField label="X" value={field.boxX} onCommit={(v) => onSave({ box: { x: v, y: field.boxY, w: field.boxW, h: field.boxH } })} />
           <PercentField label="Y" value={field.boxY} onCommit={(v) => onSave({ box: { x: field.boxX, y: v, w: field.boxW, h: field.boxH } })} />
           <PercentField label="Width" value={field.boxW} onCommit={(v) => onSave({ box: { x: field.boxX, y: field.boxY, w: v, h: field.boxH } })} />
           <PercentField label="Height" value={field.boxH} onCommit={(v) => onSave({ box: { x: field.boxX, y: field.boxY, w: field.boxW, h: v } })} />
         </div>
-        <Field label="페이지">
+        <Field label={s.position.page}>
           <input
             type="number"
             min={1}
@@ -174,33 +302,13 @@ export function FieldPropertiesPanel({
               onSave({ locked: e.target.checked });
             }}
           />
-          잠금 (위치·유형·데이터 키 변경 방지)
+          {s.position.locked}
         </label>
       </Section>
 
-      {field.type === "check" && (
-        <Section title="검증">
-          <Field label="교차 검증 (동시 true 불가 대상)">
-            <select
-              className={inputClass}
-              value={field.config.check?.exclusiveWithFieldId ?? ""}
-              onChange={(e) => onPatchConfig("check", { exclusiveWithFieldId: e.target.value || undefined })}
-            >
-              <option value="">없음</option>
-              {otherCheckFields.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.label} ({f.dataKey})
-                </option>
-              ))}
-            </select>
-            <p className="text-[11px] text-slate-400 mt-1">예: 합격/불합격 두 체크가 동시에 true면 검수 필요.</p>
-          </Field>
-        </Section>
-      )}
-
       <div className="p-4">
         <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={onDelete}>
-          필드 삭제
+          {s.deleteField}
         </button>
       </div>
     </div>
@@ -221,6 +329,8 @@ function ChoiceOptionsPanel({
   onArmRegion: (optionIndex: number | null) => void;
   armedIndex: number | null;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang].choiceOptions;
   const [local, setLocal] = useState<ChoiceOptionInput[]>(() => toInput(options));
 
   // 선택된 필드가 바뀌면(다른 choice 필드를 클릭) 로컬 편집 상태를 그 필드 기준으로 되돌린다.
@@ -239,14 +349,14 @@ function ChoiceOptionsPanel({
           <div className="flex gap-1.5">
             <input
               className={`${inputClass} flex-1`}
-              placeholder="표시명"
+              placeholder={s.labelPlaceholder}
               value={o.label}
               onChange={(e) => setLocal((prev) => prev.map((x, xi) => (xi === i ? { ...x, label: e.target.value } : x)))}
               onBlur={() => commit(local)}
             />
             <input
               className={`${inputClass} flex-1`}
-              placeholder="저장값"
+              placeholder={s.valuePlaceholder}
               value={o.storedValue}
               onChange={(e) => setLocal((prev) => prev.map((x, xi) => (xi === i ? { ...x, storedValue: e.target.value } : x)))}
               onBlur={() => commit(local)}
@@ -259,23 +369,23 @@ function ChoiceOptionsPanel({
               }`}
               onClick={() => onArmRegion(armedIndex === i ? null : i)}
             >
-              {armedIndex === i ? "캔버스에서 드래그…" : o.region ? "영역 다시 지정" : "+ 영역 지정"}
+              {armedIndex === i ? s.armRegion : o.region ? s.reassignRegion : s.addRegion}
             </button>
-            <span className="text-[11px] text-slate-400">{o.region ? "영역 지정됨" : "영역 미지정"}</span>
+            <span className="text-[11px] text-slate-400">{o.region ? s.regionSet : s.regionUnset}</span>
             <button
               className="text-xs text-red-600 ml-auto cursor-pointer"
               onClick={() => commit(local.filter((_, xi) => xi !== i))}
             >
-              삭제
+              {s.delete}
             </button>
           </div>
         </div>
       ))}
       <button
         className="text-sm border border-dashed border-[var(--color-border)] rounded-lg px-3 py-1.5 w-full text-slate-500 cursor-pointer"
-        onClick={() => commit([...local, { label: `옵션 ${local.length + 1}`, storedValue: `option_${local.length + 1}`, region: null }])}
+        onClick={() => commit([...local, { label: s.newOptionLabel(local.length + 1), storedValue: s.newOptionValue(local.length + 1), region: null }])}
       >
-        + 옵션 추가
+        {s.addOption}
       </button>
     </div>
   );
@@ -307,6 +417,8 @@ export function GroupPropertiesPanel({
   onUngroup: () => void;
   onColumnsChanged: () => Promise<void>;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [selectedColumnIds, setSelectedColumnIds] = useState<string[]>([]);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
 
@@ -335,11 +447,11 @@ export function GroupPropertiesPanel({
 
   return (
     <div className="divide-y">
-      <Section title="반복행 속성">
-        <Field label="그룹명">
+      <Section title={s.group.sectionTitle}>
+        <Field label={s.group.groupName}>
           <input className={inputClass} value={group.label} onChange={(e) => onPatchLocal({ label: e.target.value })} onBlur={() => onSave({ label: group.label })} />
         </Field>
-        <Field label="그룹 데이터 키">
+        <Field label={s.group.groupDataKey}>
           <input
             className={inputClass}
             value={group.dataKey}
@@ -347,7 +459,7 @@ export function GroupPropertiesPanel({
             onBlur={() => onSave({ dataKey: group.dataKey })}
           />
         </Field>
-        <Field label="최대 행 수">
+        <Field label={s.group.maxRows}>
           <input
             type="number"
             min={1}
@@ -357,7 +469,7 @@ export function GroupPropertiesPanel({
             onBlur={() => onSave({ maxRows: group.maxRows })}
           />
         </Field>
-        <Field label="빈 행 처리">
+        <Field label={s.group.blankRowPolicy.label}>
           <select
             className={inputClass}
             value={group.blankRowPolicy}
@@ -367,8 +479,8 @@ export function GroupPropertiesPanel({
               onSave({ blankRowPolicy });
             }}
           >
-            <option value="exclude">빈 행 제외</option>
-            <option value="include">빈 행 포함</option>
+            <option value="exclude">{s.group.blankRowPolicy.exclude}</option>
+            <option value="include">{s.group.blankRowPolicy.include}</option>
           </select>
         </Field>
         <label className="flex items-center gap-2 text-sm">
@@ -380,7 +492,7 @@ export function GroupPropertiesPanel({
               onSave({ useRowNumber: e.target.checked });
             }}
           />
-          행 번호 사용
+          {s.group.useRowNumber}
         </label>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -391,12 +503,12 @@ export function GroupPropertiesPanel({
               onSave({ allowDuplicate: e.target.checked });
             }}
           />
-          중복 허용
+          {s.group.allowDuplicate}
         </label>
       </Section>
-      <Section title="열 구성 (첫 행 기준, 좌→우)">
+      <Section title={s.columns.sectionTitle}>
         <p className="text-xs text-slate-400 -mt-1 mb-1">
-          2개 이상 체크하면 良/否처럼 여러 영역을 하나의 선택 값으로 묶을 수 있습니다.
+          {s.columns.hint}
         </p>
         <ul className="space-y-1">
           {group.columns.map((c) => (
@@ -420,9 +532,9 @@ export function GroupPropertiesPanel({
                     e.stopPropagation();
                     splitColumnToChecks(c.id);
                   }}
-                  title={`개별 체크 컬럼 ${c.choiceOptions.length}개로 복원`}
+                  title={s.columns.unmergeTitle(c.choiceOptions.length)}
                 >
-                  해제
+                  {s.columns.unmerge}
                 </button>
               )}
             </li>
@@ -433,22 +545,22 @@ export function GroupPropertiesPanel({
             className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 w-full cursor-pointer"
             onClick={() => setMergeModalOpen(true)}
           >
-            선택 컬럼으로 묶기 ({selectedColumnIds.length})
+            {s.columns.mergeButton(selectedColumnIds.length)}
           </button>
         )}
       </Section>
       {mergeModalOpen && (
         <MergeToChoiceModal fieldCount={selectedColumnIds.length} onCancel={() => setMergeModalOpen(false)} onCreate={mergeColumnsToChoice} />
       )}
-      <Section title="행별 고정값 (PDF에 이미 인쇄된 값)">
+      <Section title={s.fixedRows.sectionTitle}>
         <p className="text-xs text-slate-400 -mt-1 mb-1">
-          No.·항목명처럼 양식에 이미 인쇄돼 있어 OCR 대상이 아닌 값. 채워두면 CSV/JSON에 그대로 출력됩니다.
+          {s.fixedRows.hint}
         </p>
         <FixedRowsEditor group={group} onSave={onSave} />
       </Section>
       <div className="p-4">
         <button className="text-sm text-red-600 border border-red-200 rounded px-3 py-1 w-full" onClick={onUngroup}>
-          반복행 해제 (첫 행 필드로 되돌리기)
+          {s.ungroup}
         </button>
       </div>
     </div>
@@ -464,6 +576,8 @@ function FixedRowsEditor({
   group: RepeatGroupDTO;
   onSave: (body: Record<string, unknown>) => void;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang].fixedRows;
   const toGrid = (rows: RepeatGroupDTO["fixedRows"]) => {
     const grid: Record<number, Record<string, string>> = {};
     for (const r of rows ?? []) grid[r.rowIndex] = { ...r.values };
@@ -500,7 +614,7 @@ function FixedRowsEditor({
         <table className="text-xs w-full">
           <thead className="bg-slate-50 sticky top-0">
             <tr>
-              <th className="px-2 py-1 text-left font-medium w-10">행</th>
+              <th className="px-2 py-1 text-left font-medium w-10">{s.rowHeader}</th>
               {group.columns.map((c) => (
                 <th key={c.id} className="px-2 py-1 text-left font-medium whitespace-nowrap">
                   {c.label}
@@ -531,7 +645,7 @@ function FixedRowsEditor({
         disabled={!dirty}
         onClick={save}
       >
-        고정값 저장
+        {s.save}
       </button>
     </div>
   );

@@ -21,8 +21,6 @@ export function validateFieldValue(input: {
   // choice 유형의 유효 저장값 목록 (ChoiceOption.storedValue). 관계형 테이블이 없는
   // 반복행 열처럼 목록을 알 수 없을 때는 생략 — 이 경우 값 검사를 건너뛴다.
   choiceOptions?: string[];
-  // date 유형의 missingYearPolicy가 "document_year"일 때 채울 연도 (문서 생성 연도).
-  documentYear?: number;
   finalValue: string | null;
 }): { normalizedValue: string | null; reviewReasons: ReviewReason[] } {
   const { type, required, config, finalValue } = input;
@@ -35,7 +33,7 @@ export function validateFieldValue(input: {
   }
   if (isEmpty) return { normalizedValue: null, reviewReasons: [] };
 
-  let normalized = normalizeValue(type, finalValue, config, input.documentYear);
+  let normalized = normalizeValue(type, finalValue, config);
 
   if (type === "number") {
     const cfg = (config.number ?? {}) as NumberConfig;

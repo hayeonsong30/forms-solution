@@ -5,6 +5,94 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TemplateListItemDTO } from "@/types";
 import { Button, Card, EmptyState, PageHeader } from "@/components/ui";
+import { useLanguage, type Lang } from "@/lib/language";
+
+const STRINGS = {
+  ko: {
+    pageTitle: "양식 관리",
+    uploadBlank: "+ 빈 양식 업로드",
+    blankTemplateName: "이름 없는 양식",
+    confirmDelete: (name: string) => `"${name}" 양식을 삭제할까요? 되돌릴 수 없습니다.`,
+    hasDocumentsError: (count: number) => `이미 발행된 문서가 ${count}건 있어 삭제할 수 없습니다.`,
+    deleteFailed: "양식 삭제 실패",
+    searchPlaceholder: "양식 ID·양식명 검색",
+    tabAll: "전체",
+    tabDraft: "편집 중",
+    tabPrintable: "인쇄 가능",
+    colNo: "NO",
+    colId: "ID",
+    colName: "Name",
+    colOwner: "Owner",
+    colPage: "페이지",
+    colPrintStatus: "설정 / 남은 인쇄 (부)",
+    colStatus: "상태",
+    colCreatedAt: "등록일",
+    colUpdatedAt: "수정일",
+    colAction: "작업",
+    statusDraft: "편집 중",
+    statusPrintable: "인쇄 가능",
+    print: "프린트",
+    duplicate: "복제",
+    delete: "삭제",
+    emptyState: "등록된 양식이 없습니다.",
+    viewDocuments: "문서 조회 →",
+    printDialogTitle: "인쇄 설정",
+    blueprintMode: "청사진 모드",
+    blueprintModeDesc: "인쇄된 NCode 패턴과 구분하기 쉽게 문서 색상을 파란색으로 변환",
+    dotSize: "NCode 점 크기",
+    dotSizeDesc: "NCode 패턴 점 크기 조절 (0.1 ~ 2.0)",
+    resetDefault: "기본값으로 재설정",
+    printStatusInfo: (total: number, remaining: number) => `설정 ${total} / 남은 인쇄 ${remaining} (부)`,
+    printCountCell: (total: number, remaining: number) => `${total} / ${remaining}`,
+    cancel: "닫기",
+    downloading: "다운로드 중…",
+    download: "↓ 다운로드 (PDF)",
+    printing: "인쇄 등록 중…",
+    printAction: "🖨 인쇄하기",
+  },
+  ja: {
+    pageTitle: "フォーム管理",
+    uploadBlank: "+ 空のフォームを作成",
+    blankTemplateName: "名称未設定フォーム",
+    confirmDelete: (name: string) => `「${name}」フォームを削除しますか？元に戻せません。`,
+    hasDocumentsError: (count: number) => `すでに発行済みの文書が${count}件あるため削除できません。`,
+    deleteFailed: "フォームの削除に失敗しました",
+    searchPlaceholder: "フォームID・フォーム名で検索",
+    tabAll: "すべて",
+    tabDraft: "編集中",
+    tabPrintable: "印刷可能",
+    colNo: "NO",
+    colId: "ID",
+    colName: "Name",
+    colOwner: "Owner",
+    colPage: "ページ",
+    colPrintStatus: "設定 / 残り印刷（部）",
+    colStatus: "ステータス",
+    colCreatedAt: "登録日",
+    colUpdatedAt: "更新日",
+    colAction: "操作",
+    statusDraft: "編集中",
+    statusPrintable: "印刷可能",
+    print: "印刷",
+    duplicate: "複製",
+    delete: "削除",
+    emptyState: "登録されたフォームがありません。",
+    viewDocuments: "文書一覧 →",
+    printDialogTitle: "印刷設定",
+    blueprintMode: "ブループリントモード",
+    blueprintModeDesc: "印刷されたNCodeパターンと区別しやすいよう文書の色を青色に変換します",
+    dotSize: "NCodeドットサイズ",
+    dotSizeDesc: "NCodeパターンのドットサイズを調整（0.1〜2.0）",
+    resetDefault: "デフォルトに戻す",
+    printStatusInfo: (total: number, remaining: number) => `設定 ${total} / 残り印刷 ${remaining}（部）`,
+    printCountCell: (total: number, remaining: number) => `${total} / ${remaining}`,
+    cancel: "閉じる",
+    downloading: "ダウンロード中…",
+    download: "↓ ダウンロード（PDF）",
+    printing: "印刷登録中…",
+    printAction: "🖨 印刷する",
+  },
+} satisfies Record<Lang, unknown>;
 
 const PRINT_SETTINGS_KEY = "formsolution.printSettings";
 type PrintSettings = { blueprintMode: boolean; dotSize: number };
@@ -27,6 +115,8 @@ type FilterTab = "all" | "draft" | "printable";
 // 상태 전환은 편집기 헤더 드롭다운에서 하고, 목록은 표시 전용이다.
 export default function TemplatesPage() {
   const router = useRouter();
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [templates, setTemplates] = useState<TemplateListItemDTO[]>([]);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [creating, setCreating] = useState(false);
@@ -34,6 +124,7 @@ export default function TemplatesPage() {
   const [tab, setTab] = useState<FilterTab>("all");
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [printTarget, setPrintTarget] = useState<TemplateListItemDTO | null>(null);
 
   async function refresh() {
@@ -59,7 +150,7 @@ export default function TemplatesPage() {
       const res = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: orgs[0].id, name: "이름 없는 양식", pageCount: 1 }),
+        body: JSON.stringify({ orgId: orgs[0].id, name: s.blankTemplateName, pageCount: 1 }),
       });
       if (!res.ok) throw new Error("create failed");
       const created = await res.json();
@@ -69,33 +160,24 @@ export default function TemplatesPage() {
     }
   }
 
-  // 프린트는 (1) NCode 인쇄 파일을 PDF로 내려받고 (2) 문서 조회에 잡힐 문서 레코드를
-  // 함께 생성한다 — 실물 인쇄와 시스템 등록이 항상 같이 일어나야 하기 때문. 실제 NCode
-  // 패턴 인코딩은 wasm-pdf-core 연동 전까지 아직 없어(project memory 참고) 지금은 원본
-  // 양식 PDF를 그대로 내려받는다 — 다운로드되는 실제 인쇄 파일은 이 단계에서 아직 손대지
-  // 않는다는 걸 다이얼로그에 명시한다.
-  async function confirmPrint(template: TemplateListItemDTO) {
-    const pdfRes = await fetch(`/api/templates/${template.id}/pdf`);
-    if (pdfRes.ok) {
-      const blob = await pdfRes.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${template.name}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-    const res = await fetch(`/api/templates/${template.id}/documents`, { method: "POST" });
-    setPrintTarget(null);
-    if (res.ok) {
-      const doc = await res.json();
-      router.push(`/documents/${doc.id}`);
+  // 인쇄 완료로 편집이 잠긴 양식을 고치고 싶을 때 쓰는 유일한 방법 — 필드·반복행·Excel
+  // 템플릿까지 그대로 복사한 새 draft 양식을 만들어 그 편집기로 이동한다.
+  async function duplicateTemplate(t: TemplateListItemDTO) {
+    setDuplicatingId(t.id);
+    try {
+      const res = await fetch(`/api/templates/${t.id}/duplicate`, { method: "POST" });
+      if (res.ok) {
+        const created = await res.json();
+        router.push(`/editor/${created.id}`);
+      }
+    } finally {
+      setDuplicatingId(null);
     }
   }
 
   // 이미 발행된 문서가 있으면 서버가 409로 막는다 — 그 경우 사유를 그대로 보여준다.
   async function deleteTemplate(t: TemplateListItemDTO) {
-    if (!window.confirm(`"${t.name}" 양식을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    if (!window.confirm(s.confirmDelete(t.name))) return;
     setActionError(null);
     setDeletingId(t.id);
     try {
@@ -107,8 +189,8 @@ export default function TemplatesPage() {
       const json = await res.json();
       setActionError(
         json.error === "TEMPLATE_HAS_DOCUMENTS"
-          ? `이미 발행된 문서가 ${json.documentCount}건 있어 삭제할 수 없습니다.`
-          : "양식 삭제 실패"
+          ? s.hasDocumentsError(json.documentCount)
+          : s.deleteFailed
       );
     } finally {
       setDeletingId(null);
@@ -127,10 +209,10 @@ export default function TemplatesPage() {
   return (
     <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-10 py-6 sm:py-8">
       <PageHeader
-        title="양식 관리"
+        title={s.pageTitle}
         actions={
           <Button variant="primary" onClick={createBlankTemplate} disabled={creating}>
-            + 빈 양식 업로드
+            {s.uploadBlank}
           </Button>
         }
       />
@@ -142,20 +224,20 @@ export default function TemplatesPage() {
           <span className="text-slate-400">⌕</span>
           <input
             className="flex-1 outline-none min-w-0"
-            placeholder="양식 ID·양식명 검색"
+            placeholder={s.searchPlaceholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
         <div className="flex gap-1 flex-wrap">
           <FilterTabButton active={tab === "all"} onClick={() => setTab("all")}>
-            전체
+            {s.tabAll}
           </FilterTabButton>
           <FilterTabButton active={tab === "draft"} onClick={() => setTab("draft")}>
-            편집 중
+            {s.tabDraft}
           </FilterTabButton>
           <FilterTabButton active={tab === "printable"} onClick={() => setTab("printable")}>
-            인쇄 가능
+            {s.tabPrintable}
           </FilterTabButton>
         </div>
       </div>
@@ -165,16 +247,16 @@ export default function TemplatesPage() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-400">
             <tr>
-              <th className="px-4 py-2.5 font-medium w-10 whitespace-nowrap">NO</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">ID</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">Name</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">Owner</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">페이지</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">필드</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">상태</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">등록일</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">수정일</th>
-              <th className="px-4 py-2.5 font-medium whitespace-nowrap">작업</th>
+              <th className="px-4 py-2.5 font-medium w-10 whitespace-nowrap">{s.colNo}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colId}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colName}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colOwner}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colPage}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colPrintStatus}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colStatus}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colCreatedAt}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colUpdatedAt}</th>
+              <th className="px-4 py-2.5 font-medium whitespace-nowrap">{s.colAction}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--color-border)]">
@@ -196,12 +278,14 @@ export default function TemplatesPage() {
                 <td className="px-4 py-3 font-medium whitespace-nowrap">{t.name}</td>
                 <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{t.org.name}</td>
                 <td className="px-4 py-3 text-slate-500">{t.pageCount}</td>
-                <td className="px-4 py-3 text-slate-500">{t.fieldCount}</td>
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                  {s.printCountCell(t.printCopies, Math.max(0, t.printCopies - t.printedCount))}
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {t.status === "draft" ? (
-                    <span className="text-xs text-slate-500">편집 중</span>
+                    <span className="text-xs text-slate-500">{s.statusDraft}</span>
                   ) : (
-                    <span className="text-xs text-[var(--color-status-green-fg)] font-medium">인쇄 가능</span>
+                    <span className="text-xs text-[var(--color-status-green-fg)] font-medium">{s.statusPrintable}</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{new Date(t.createdAt).toLocaleDateString("ko-KR")}</td>
@@ -209,10 +293,13 @@ export default function TemplatesPage() {
                 <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                   <div className="flex gap-1.5">
                     <Button disabled={t.status !== "printable"} onClick={() => setPrintTarget(t)}>
-                      프린트
+                      {s.print}
+                    </Button>
+                    <Button disabled={duplicatingId === t.id} onClick={() => duplicateTemplate(t)}>
+                      {s.duplicate}
                     </Button>
                     <Button variant="danger" disabled={deletingId === t.id} onClick={() => deleteTemplate(t)}>
-                      삭제
+                      {s.delete}
                     </Button>
                   </div>
                 </td>
@@ -221,17 +308,24 @@ export default function TemplatesPage() {
           </tbody>
         </table>
         </div>
-        {filtered.length === 0 && <EmptyState>등록된 양식이 없습니다.</EmptyState>}
+        {filtered.length === 0 && <EmptyState>{s.emptyState}</EmptyState>}
       </Card>
 
       <p className="text-xs text-slate-400 mt-3">
         <Link href="/documents" className="hover:underline">
-          문서 조회 →
+          {s.viewDocuments}
         </Link>
       </p>
 
       {printTarget && (
-        <PrintSettingsDialog template={printTarget} onCancel={() => setPrintTarget(null)} onConfirm={confirmPrint} />
+        <PrintSettingsDialog
+          template={printTarget}
+          onCancel={() => setPrintTarget(null)}
+          onPrinted={async () => {
+            await refresh();
+            setPrintTarget(null);
+          }}
+        />
       )}
     </div>
   );
@@ -240,26 +334,56 @@ export default function TemplatesPage() {
 function PrintSettingsDialog({
   template,
   onCancel,
-  onConfirm,
+  onPrinted,
 }: {
   template: TemplateListItemDTO;
   onCancel: () => void;
-  onConfirm: (template: TemplateListItemDTO) => Promise<void>;
+  onPrinted: () => Promise<void>;
 }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [settings, setSettings] = useState<PrintSettings>(loadPrintSettings);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"download" | "print" | null>(null);
+  const remaining = Math.max(0, template.printCopies - template.printedCount);
 
   function persist(next: PrintSettings) {
     setSettings(next);
     window.localStorage.setItem(PRINT_SETTINGS_KEY, JSON.stringify(next));
   }
 
+  // 다운로드: 예정 인쇄 부수만큼 페이지를 이어붙인 PDF 한 장을 받는다. 문서함 등록 같은
+  // 부수효과는 없다 — 인쇄 자체는 앱 밖(실물 프린터/인쇄소)에서 이뤄지기 때문.
   async function handleDownload() {
-    setBusy(true);
+    setBusy("download");
     try {
-      await onConfirm(template);
+      const res = await fetch(`/api/templates/${template.id}/pdf?copies=${template.printCopies}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const date = new Date().toISOString().slice(0, 10);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${template.name}_${date}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  }
+
+  // 인쇄하기: 남은 부수만큼 문서(=SOBP)를 한 번에 발급해 문서함에 등록한다.
+  async function handlePrint() {
+    if (remaining <= 0) return;
+    setBusy("print");
+    try {
+      const res = await fetch(`/api/templates/${template.id}/documents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count: remaining }),
+      });
+      if (res.ok) await onPrinted();
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -269,13 +393,16 @@ function PrintSettingsDialog({
         <Card className="overflow-hidden">
           <div className="flex items-center gap-2 px-5 py-4 bg-[var(--color-brand-600)] text-white">
             <span>🖶</span>
-            <h2 className="text-sm font-semibold">인쇄 설정</h2>
+            <h2 className="text-sm font-semibold">{s.printDialogTitle}</h2>
           </div>
           <div className="p-5 space-y-5">
+            <p className="text-xs text-slate-500 bg-slate-50 rounded-md px-3 py-2">
+              {s.printStatusInfo(template.printCopies, remaining)}
+            </p>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-medium text-[var(--foreground)]">청사진 모드</div>
-                <div className="text-xs text-slate-400 mt-0.5">인쇄된 NCode 패턴과 구분하기 쉽게 문서 색상을 파란색으로 변환</div>
+                <div className="text-sm font-medium text-[var(--foreground)]">{s.blueprintMode}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{s.blueprintModeDesc}</div>
               </div>
               <button
                 onClick={() => persist({ ...settings, blueprintMode: !settings.blueprintMode })}
@@ -292,8 +419,8 @@ function PrintSettingsDialog({
             </div>
 
             <div>
-              <div className="text-sm font-medium text-[var(--foreground)]">NCode 점 크기</div>
-              <div className="text-xs text-slate-400 mt-0.5 mb-2">NCode 패턴 점 크기 조절 (0.1 ~ 2.0)</div>
+              <div className="text-sm font-medium text-[var(--foreground)]">{s.dotSize}</div>
+              <div className="text-xs text-slate-400 mt-0.5 mb-2">{s.dotSizeDesc}</div>
               <div className="flex items-center gap-3">
                 <input
                   type="range"
@@ -312,20 +439,21 @@ function PrintSettingsDialog({
               onClick={() => persist(DEFAULT_PRINT_SETTINGS)}
               className="text-xs text-slate-500 underline cursor-pointer"
             >
-              기본값으로 재설정
+              {s.resetDefault}
             </button>
 
-            <p className="text-xs text-[var(--color-brand-700)] bg-[var(--color-brand-50)] rounded-lg px-3 py-2.5">
-              ⓘ 이 설정은 향후 인쇄 시 기본값으로 저장됩니다. 다운로드되는 PDF에는 실제 NCode 패턴이 아직 적용되지 않습니다 —
-              스마트펜 SDK 연동 전까지는 원본 양식 PDF가 그대로 내려받아집니다.
-            </p>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={handleDownload} disabled={busy !== null}>
+                {busy === "download" ? s.downloading : s.download}
+              </Button>
+              <Button className="flex-1" variant="primary" onClick={handlePrint} disabled={busy !== null || remaining <= 0}>
+                {busy === "print" ? s.printing : s.printAction}
+              </Button>
+            </div>
           </div>
           <div className="flex gap-2 px-5 pb-5">
-            <Button className="flex-1" onClick={onCancel} disabled={busy}>
-              취소
-            </Button>
-            <Button className="flex-1" variant="primary" onClick={handleDownload} disabled={busy}>
-              {busy ? "다운로드 중…" : "↓ 다운로드"}
+            <Button className="flex-1" onClick={onCancel} disabled={busy !== null}>
+              {s.cancel}
             </Button>
           </div>
         </Card>

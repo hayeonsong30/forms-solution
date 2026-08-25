@@ -16,18 +16,16 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/documents/[doc
     include: { field: true, repeatColumn: true },
   });
 
-  const unresolved = values.filter((v) => v.reviewStatus === "needs_review");
+  // 2026-08-25: "검수 필요" 필드가 남아있어도 확정을 막지 않는다(사용자 결정) — 필수값
+  // 누락만 계속 막는다. 문서 전체를 한 덩어리로 보는 all-or-nothing 게이트가, 향후
+  // 문서 하나에 여러 항목(가상번호)이 들어가는 케이스에서 특히 걸림돌이 될 것으로 판단.
   const missingRequired = values.filter(
     (v) => v.finalValue === null && (v.field?.required || v.repeatColumn?.required)
   );
 
-  if (unresolved.length > 0 || missingRequired.length > 0) {
+  if (missingRequired.length > 0) {
     return Response.json(
-      {
-        error: "VALIDATION_FAILED",
-        unresolvedFieldValueIds: unresolved.map((v) => v.id),
-        missingRequiredFieldValueIds: missingRequired.map((v) => v.id),
-      },
+      { error: "VALIDATION_FAILED", missingRequiredFieldValueIds: missingRequired.map((v) => v.id) },
       { status: 409 }
     );
   }

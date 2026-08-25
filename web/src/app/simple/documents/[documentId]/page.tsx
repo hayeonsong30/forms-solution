@@ -3,6 +3,7 @@
 import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PdfPageCanvas } from "@/components/editor/PdfPageCanvas";
+import { useLanguage, type Lang } from "@/lib/language";
 
 type CheckConfig = { outputMode?: "boolean" | "symbol"; trueMarks?: string[] };
 type Box = { boxX: number; boxY: number; boxW: number; boxH: number; type: string; config?: { check?: CheckConfig } };
@@ -34,14 +35,89 @@ type DocumentDetail = {
 };
 type RepeatGroupMeta = { id: string; rowHeight: number };
 
-const STATUS_LABEL: Record<string, string> = {
-  printed: "인쇄됨",
-  received: "필기 수신",
-  processing: "처리 중",
-  review_required: "검수 필요",
-  confirmed: "확정",
-  error: "오류",
-};
+const STRINGS = {
+  ko: {
+    status: {
+      printed: "인쇄됨",
+      received: "필기 수신",
+      processing: "처리 중",
+      review_required: "검수 필요",
+      confirmed: "확정",
+      error: "오류",
+    } as Record<string, string>,
+    backToList: "← 문서 조회",
+    pdf: "PDF",
+    excel: "Excel",
+    listExcel: "List Excel",
+    textView: "텍스트 변환 보기",
+    textViewTooltip: "켜면 손글씨를 인식해 빈 양식 위에 컴퓨터 텍스트로 채워 보여줍니다",
+    recognizing: "필기 인식 중… (실제 OCR 실행)",
+    recognizeFailed: "필기 인식에 실패했습니다.",
+    loading: "불러오는 중…",
+    noPageImage: "아직 업로드된 필기 이미지가 없습니다.",
+    pageImageAlt: "문서 페이지",
+    docInfo: "문서 정보",
+    info: {
+      status: "상태",
+      form: "양식",
+      docNo: "문서번호",
+      pageCount: "페이지 수",
+      registeredAt: "등록일시",
+      confirmedAt: "확정일시",
+    },
+    none: "-",
+  },
+  ja: {
+    status: {
+      printed: "印刷済み",
+      received: "筆記受信",
+      processing: "処理中",
+      review_required: "確認必要",
+      confirmed: "確定",
+      error: "エラー",
+    } as Record<string, string>,
+    backToList: "← 文書照会",
+    pdf: "PDF",
+    excel: "Excel",
+    listExcel: "List Excel",
+    textView: "テキスト変換表示",
+    textViewTooltip: "オンにすると手書き文字を認識し、空の様式にコンピューターフォントで反映して表示します",
+    recognizing: "筆記認識中…（実際にOCRを実行）",
+    recognizeFailed: "筆記認識に失敗しました。",
+    loading: "読み込み中…",
+    noPageImage: "まだアップロードされた筆記画像がありません。",
+    pageImageAlt: "文書ページ",
+    docInfo: "文書情報",
+    info: {
+      status: "状態",
+      form: "様式",
+      docNo: "文書番号",
+      pageCount: "ページ数",
+      registeredAt: "登録日時",
+      confirmedAt: "確定日時",
+    },
+    none: "-",
+  },
+} satisfies Record<
+  Lang,
+  {
+    status: Record<string, string>;
+    backToList: string;
+    pdf: string;
+    excel: string;
+    listExcel: string;
+    textView: string;
+    textViewTooltip: string;
+    recognizing: string;
+    recognizeFailed: string;
+    loading: string;
+    noPageImage: string;
+    pageImageAlt: string;
+    docInfo: string;
+    info: { status: string; form: string; docNo: string; pageCount: string; registeredAt: string; confirmedAt: string };
+    none: string;
+  }
+>;
 
 // PRD 요청: 문서 조회 상세는 필드별 검수 화면 없이 페이지 이미지 + 기본 정보만 간략히 보여준다.
 // "텍스트 변환 보기" (DigiDox 참고): 손글씨 스캔 이미지 대신, 빈 원본 양식 위에 인식된
@@ -49,6 +125,8 @@ const STATUS_LABEL: Record<string, string> = {
 // 아니라 손글씨 자체를 텍스트로 "바꿔서" 보여주는 것.
 export default function SimpleDocumentDetailPage({ params }: { params: Promise<{ documentId: string }> }) {
   const { documentId } = use(params);
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [hasListTemplate, setHasListTemplate] = useState(false);
   const [repeatGroups, setRepeatGroups] = useState<RepeatGroupMeta[]>([]);
@@ -109,7 +187,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
       const res = await fetch(`/api/documents/${doc.id}/process`, { method: "POST" });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        setRecognizeError(json.message ?? "필기 인식에 실패했습니다.");
+        setRecognizeError(json.message ?? s.recognizeFailed);
         return;
       }
       const refreshed = await fetch(`/api/documents/${documentId}`).then((r) => r.json());
@@ -119,7 +197,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
     }
   }
 
-  if (!doc) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
+  if (!doc) return <div className="p-8 text-sm text-slate-400">{s.loading}</div>;
 
   const confirmed = doc.status === "confirmed";
   const rowHeightByGroup = new Map(repeatGroups.map((g) => [g.id, g.rowHeight]));
@@ -128,7 +206,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <Link href="/simple/documents" className="text-xs text-slate-400 hover:underline">
-        ← 문서 조회
+        {s.backToList}
       </Link>
 
       <div className="flex items-start justify-between mt-1 mb-6">
@@ -141,7 +219,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
             href={`/api/templates/${doc.templateVersion.template.id}/pdf`}
             className="text-sm border border-slate-300 rounded-md px-3.5 py-2 hover:bg-slate-50"
           >
-            PDF
+            {s.pdf}
           </a>
           <a
             href={confirmed ? `/api/documents/${doc.id}/export/customer-xlsx?type=doc` : undefined}
@@ -150,7 +228,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
               confirmed ? "border-slate-300 hover:bg-slate-50" : "border-slate-200 text-slate-300 pointer-events-none"
             }`}
           >
-            Excel
+            {s.excel}
           </a>
           {hasListTemplate && (
             <a
@@ -160,16 +238,16 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
                 confirmed ? "border-slate-300 hover:bg-slate-50" : "border-slate-200 text-slate-300 pointer-events-none"
               }`}
             >
-              List Excel
+              {s.listExcel}
             </a>
           )}
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none ml-2">
-            텍스트 변환 보기
+            {s.textView}
             <button
               type="button"
               onClick={toggleTextView}
               disabled={recognizing}
-              title="켜면 손글씨를 인식해 빈 양식 위에 컴퓨터 텍스트로 채워 보여줍니다"
+              title={s.textViewTooltip}
               className={`relative w-10 h-5.5 rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
                 textView ? "bg-slate-900" : "bg-slate-300"
               }`}
@@ -184,7 +262,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      {recognizing && <p className="text-xs text-slate-500 mb-2">필기 인식 중… (실제 OCR 실행)</p>}
+      {recognizing && <p className="text-xs text-slate-500 mb-2">{s.recognizing}</p>}
       {recognizeError && <p className="text-xs text-red-600 mb-2">{recognizeError}</p>}
 
       <div className="grid grid-cols-[1fr_320px] gap-6">
@@ -219,24 +297,24 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
                 })}
               </div>
             ) : (
-              <span className="text-sm text-slate-300">불러오는 중…</span>
+              <span className="text-sm text-slate-300">{s.loading}</span>
             )
           ) : doc.pageImageCount > 0 ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/documents/${doc.id}/page-image/0`} alt="문서 페이지" className="w-full block" />
+            <img src={`/api/documents/${doc.id}/page-image/0`} alt={s.pageImageAlt} className="w-full block" />
           ) : (
-            <span className="text-sm text-slate-300">아직 업로드된 필기 이미지가 없습니다.</span>
+            <span className="text-sm text-slate-300">{s.noPageImage}</span>
           )}
         </div>
 
         <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 h-fit">
-          <h2 className="text-sm font-semibold text-slate-900">문서 정보</h2>
-          <InfoRow label="상태" value={STATUS_LABEL[doc.status] ?? doc.status} />
-          <InfoRow label="양식" value={doc.templateVersion.template.name} />
-          <InfoRow label="문서번호" value={doc.ncode ?? "-"} />
-          <InfoRow label="페이지 수" value={String(doc.templateVersion.pageCount)} />
-          <InfoRow label="등록일시" value={new Date(doc.createdAt).toLocaleString("ko-KR")} />
-          {doc.confirmedAt && <InfoRow label="확정일시" value={new Date(doc.confirmedAt).toLocaleString("ko-KR")} />}
+          <h2 className="text-sm font-semibold text-slate-900">{s.docInfo}</h2>
+          <InfoRow label={s.info.status} value={s.status[doc.status] ?? doc.status} />
+          <InfoRow label={s.info.form} value={doc.templateVersion.template.name} />
+          <InfoRow label={s.info.docNo} value={doc.ncode ?? s.none} />
+          <InfoRow label={s.info.pageCount} value={String(doc.templateVersion.pageCount)} />
+          <InfoRow label={s.info.registeredAt} value={new Date(doc.createdAt).toLocaleString(lang === "ja" ? "ja-JP" : "ko-KR")} />
+          {doc.confirmedAt && <InfoRow label={s.info.confirmedAt} value={new Date(doc.confirmedAt).toLocaleString(lang === "ja" ? "ja-JP" : "ko-KR")} />}
         </div>
       </div>
     </div>

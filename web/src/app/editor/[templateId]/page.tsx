@@ -2,19 +2,191 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { FieldDTO, FieldType, RepeatGroupDTO, TemplateDetailResponse } from "@/types";
 import { Button } from "@/components/ui";
 import { LeftPanel } from "@/components/editor/LeftPanel";
 import { PdfUploadEmpty } from "@/components/editor/PdfUploadEmpty";
 import { PdfPageCanvas } from "@/components/editor/PdfPageCanvas";
 import { FieldPropertiesPanel, GroupPropertiesPanel, type ChoiceOptionInput } from "@/components/editor/PropertiesPanel";
-import { CreateRepeatGroupModal } from "@/components/editor/RepeatGroupModal";
 import { MergeToChoiceModal } from "@/components/editor/MergeToChoiceModal";
 import { DataTestDialog } from "@/components/editor/DataTestDialog";
 import { ExcelTemplateModal } from "@/components/editor/ExcelTemplateModal";
 import { clamp } from "@/components/editor/configPanels";
 import { useCommandStack } from "@/lib/commandStack";
 import { arrayBufferToBase64 } from "@/lib/base64";
+import { useLanguage, type Lang } from "@/lib/language";
+
+const STRINGS = {
+  ko: {
+    loading: "불러오는 중…",
+    back: "← 뒤로",
+    backTitle: "양식 관리로 돌아가기",
+    nameEditTitle: "클릭해서 양식명 수정",
+    saveStatusSaving: "저장 중…",
+    saveStatusError: "저장 실패 — 저장 버튼을 눌러 다시 확인하세요",
+    savedAt: (t: string) => `${t}에 저장됨`,
+    autoSave: "자동 저장",
+    saveButton: "💾 저장",
+    saveButtonTitle: "서버에 저장된 최신 상태를 다시 불러와 확인합니다",
+    testButton: "▷ 데이터 테스트",
+    testButtonTitle: "빈 원본 양식에서 필드 출력 구조·CSV 열 구성 확인",
+    excelButtonTitle: "고객 엑셀 서식에 [데이터키]를 넣어 업로드하면 확정값으로 치환해 출력합니다",
+    statusEditing: "편집 중",
+    statusPrintable: "인쇄 가능",
+    printedLockedTitle: "이미 인쇄된 양식은 다시 편집할 수 없습니다 — 복제해서 새로 만드세요.",
+    duplicate: "⧉ 복제해서 편집",
+    duplicating: "복제 중…",
+    sobpButton: "🖨 인쇄 부수",
+    sobpButtonTitle: "이 양식으로 몇 부를 인쇄할 예정인지 설정합니다",
+    sobpPopoverTitle: "인쇄 부수",
+    sobpPopoverDesc: "이 양식으로 인쇄할 예정 부수입니다. 페이지마다 새 SOBP가 발급되므로, 필요한 SOBP 수는 페이지 수 × 부수로 계산됩니다.",
+    sobpCountLabel: "부수",
+    sobpTotalLabel: (pages: number, copies: number, total: number) => `${pages}페이지 × ${copies}부 = SOBP ${total}개 필요`,
+    sobpSave: "저장",
+    sobpClose: "닫기",
+    toolGroupTool: "도구",
+    toolGroupHistory: "실행 내역",
+    toolGroupField: "필드",
+    toolGroupScreen: "화면",
+    toolSelect: "⛶ 선택",
+    toolSelectTitle: "선택 (필드를 클릭·드래그해서 선택·이동)",
+    toolPan: "✋ 이동",
+    toolPanTitle: "이동 (캔버스를 드래그해서 화면 이동)",
+    undo: "↩ 실행 취소",
+    undoTitle: "실행 취소 (Cmd/Ctrl+Z)",
+    redo: "↪ 다시 실행",
+    redoTitle: "다시 실행 (Cmd/Ctrl+Shift+Z)",
+    copy: "⧉ 복사",
+    copyTitle: "복사 (Cmd/Ctrl+C)",
+    paste: "📋 붙여넣기",
+    pasteTitle: "붙여넣기 (Cmd/Ctrl+V)",
+    delete: "🗑 삭제",
+    deleteTitle: "삭제 (Delete)",
+    zoomOutTitle: "축소",
+    zoomInTitle: "확대",
+    fitToScreen: "화면 맞춤",
+    groupIntoRepeat: (n: number) => `반복행으로 묶기 (${n})`,
+    groupIntoChoice: (n: number) => `선택 필드로 묶기 (${n})`,
+    aiDetectRunning: "AI 분석 중… (최대 2분)",
+    aiDetect: "✦ AI 자동 추천",
+    prevPageTitle: "이전 페이지",
+    nextPageTitle: "다음 페이지",
+    pageOf: (p: number, total: number) => `${p} / ${total}페이지`,
+    selectFieldPrompt: "필드를 선택하세요.",
+    footerPage: (p: number, total: number) => `페이지 ${p}/${total}`,
+    footerSelected: (n: number) => `선택 ${n}개`,
+    footerCoord: "정규화 좌표 (0~1)",
+    errorSharePage: "같은 페이지의 필드만 묶을 수 있습니다.",
+    errorGroupCreateFailed: "반복행 생성 실패",
+    errorMergeFailed: "선택 필드로 묶기 실패",
+    errorFirstRowSelect: "먼저 첫 행 필드를 다중 선택하세요 (Shift+클릭).",
+    errorLockedRestore: "잠긴 필드는 복원할 수 없습니다.",
+    errorNoRegionRestore: "옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.",
+    errorLockedDelete: "잠긴 필드는 삭제할 수 없습니다.",
+    errorAiDetectFailed: "AI 자동 추천 실패",
+    errorPrintableFailed: "인쇄 가능 전환 실패",
+    errorPdfUploadFailed: "PDF 업로드에 실패했습니다.",
+    aiFilteredInfo: (n: number) => `신뢰도가 낮거나 영역이 너무 작은 후보 ${n}개는 자동으로 제외했습니다.`,
+    confirmRestoreChoice: (label: string, n: number) =>
+      `"${label}"은(는) ${n}개 옵션이 합쳐진 선택 필드입니다.\n\n확인: 개별 체크 필드 ${n}개로 복원\n취소: 다음 화면에서 완전 삭제 여부 선택`,
+    confirmDeleteChoice: (label: string, n: number) => `"${label}"과 옵션 ${n}개를 모두 삭제합니다. 계속할까요?`,
+    newTextLabel: "새 텍스트",
+    newNumberLabel: "새 숫자",
+    newDateLabel: "새 날짜",
+    newTimeLabel: "새 시간",
+    newCheckLabel: "새 체크",
+    newChoiceLabel: "새 선택",
+    copySuffix: (label: string) => `${label} 복사`,
+    pdfUploading: "PDF 업로드 중…",
+    pdfLoading: "PDF 불러오는 중…",
+    timeLocale: "ko-KR",
+  },
+  ja: {
+    loading: "読み込み中…",
+    back: "← 戻る",
+    backTitle: "様式管理に戻る",
+    nameEditTitle: "クリックして様式名を編集",
+    saveStatusSaving: "保存中…",
+    saveStatusError: "保存に失敗しました — 保存ボタンを押して再確認してください",
+    savedAt: (t: string) => `${t}に保存済み`,
+    autoSave: "自動保存",
+    saveButton: "💾 保存",
+    saveButtonTitle: "サーバーに保存された最新の状態を再取得して確認します",
+    testButton: "▷ データテスト",
+    testButtonTitle: "空の原本様式でフィールド出力構造・CSV列構成を確認",
+    excelButtonTitle: "顧客のExcel書式に[データキー]を入れてアップロードすると、確定値に置き換えて出力します",
+    statusEditing: "編集中",
+    statusPrintable: "印刷可能",
+    printedLockedTitle: "すでに印刷された様式は再編集できません — 複製して新しく作ってください。",
+    duplicate: "⧉ 複製して編集",
+    duplicating: "複製中…",
+    sobpButton: "🖨 印刷部数",
+    sobpButtonTitle: "この様式で何部印刷する予定か設定します",
+    sobpPopoverTitle: "印刷部数",
+    sobpPopoverDesc: "この様式で印刷する予定部数です。ページごとに新しいSOBPが発行されるため、必要なSOBP数はページ数×部数で計算されます。",
+    sobpCountLabel: "部数",
+    sobpTotalLabel: (pages: number, copies: number, total: number) => `${pages}ページ × ${copies}部 = SOBP ${total}個必要`,
+    sobpSave: "保存",
+    sobpClose: "閉じる",
+    toolGroupTool: "ツール",
+    toolGroupHistory: "実行履歴",
+    toolGroupField: "フィールド",
+    toolGroupScreen: "画面",
+    toolSelect: "⛶ 選択",
+    toolSelectTitle: "選択（フィールドをクリック・ドラッグして選択・移動）",
+    toolPan: "✋ 移動",
+    toolPanTitle: "移動（キャンバスをドラッグして画面を移動）",
+    undo: "↩ 元に戻す",
+    undoTitle: "元に戻す（Cmd/Ctrl+Z）",
+    redo: "↪ やり直す",
+    redoTitle: "やり直す（Cmd/Ctrl+Shift+Z）",
+    copy: "⧉ コピー",
+    copyTitle: "コピー（Cmd/Ctrl+C）",
+    paste: "📋 貼り付け",
+    pasteTitle: "貼り付け（Cmd/Ctrl+V）",
+    delete: "🗑 削除",
+    deleteTitle: "削除（Delete）",
+    zoomOutTitle: "縮小",
+    zoomInTitle: "拡大",
+    fitToScreen: "画面に合わせる",
+    groupIntoRepeat: (n: number) => `繰り返し行にまとめる（${n}）`,
+    groupIntoChoice: (n: number) => `選択フィールドにまとめる（${n}）`,
+    aiDetectRunning: "AI分析中…（最大2分）",
+    aiDetect: "✦ AI自動提案",
+    prevPageTitle: "前のページ",
+    nextPageTitle: "次のページ",
+    pageOf: (p: number, total: number) => `${p} / ${total}ページ`,
+    selectFieldPrompt: "フィールドを選択してください。",
+    footerPage: (p: number, total: number) => `ページ ${p}/${total}`,
+    footerSelected: (n: number) => `選択 ${n}件`,
+    footerCoord: "正規化座標（0〜1）",
+    errorSharePage: "同じページのフィールドのみまとめられます。",
+    errorGroupCreateFailed: "繰り返し行の作成に失敗しました",
+    errorMergeFailed: "選択フィールドへのまとめに失敗しました",
+    errorFirstRowSelect: "先に1行目のフィールドを複数選択してください（Shift+クリック）。",
+    errorLockedRestore: "ロックされたフィールドは復元できません。",
+    errorNoRegionRestore: "オプションに領域が指定されていないため、個別フィールドに復元できません。",
+    errorLockedDelete: "ロックされたフィールドは削除できません。",
+    errorAiDetectFailed: "AI自動提案に失敗しました",
+    errorPrintableFailed: "印刷可能への切り替えに失敗しました",
+    errorPdfUploadFailed: "PDFのアップロードに失敗しました。",
+    aiFilteredInfo: (n: number) => `信頼度が低いか領域が小さすぎる候補 ${n}件は自動的に除外しました。`,
+    confirmRestoreChoice: (label: string, n: number) =>
+      `「${label}」は${n}件のオプションが統合された選択フィールドです。\n\nOK: 個別チェックフィールド${n}件に復元\nキャンセル: 次の画面で完全削除するか選択`,
+    confirmDeleteChoice: (label: string, n: number) => `「${label}」とオプション${n}件をすべて削除します。続けますか?`,
+    newTextLabel: "新規テキスト",
+    newNumberLabel: "新規数値",
+    newDateLabel: "新規日付",
+    newTimeLabel: "新規時間",
+    newCheckLabel: "新規チェック",
+    newChoiceLabel: "新規選択",
+    copySuffix: (label: string) => `${label}のコピー`,
+    pdfUploading: "PDFアップロード中…",
+    pdfLoading: "PDF読み込み中…",
+    timeLocale: "ja-JP",
+  },
+} satisfies Record<Lang, Record<string, unknown>>;
 
 const DEFAULT_BOX = { w: 0.16, h: 0.04 };
 const CANVAS_TARGET_WIDTH = 760;
@@ -42,6 +214,7 @@ const RESIZE_HANDLES: { corner: ResizeCorner; className: string }[] = [
 
 export default function EditorPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = use(params);
+  const router = useRouter();
 
   const [data, setData] = useState<TemplateDetailResponse | null>(null);
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
@@ -50,7 +223,6 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [multiSelectIds, setMultiSelectIds] = useState<string[]>([]);
-  const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [excelModalOpen, setExcelModalOpen] = useState(false);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
@@ -67,6 +239,8 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   const [zoom, setZoom] = useState(1);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [sobpMenuOpen, setSobpMenuOpen] = useState(false);
+  const [sobpDraft, setSobpDraft] = useState(1);
   const [optionDraw, setOptionDraw] = useState<{ fieldId: string; optionIndex: number } | null>(null);
   const [optionDrawPreview, setOptionDrawPreview] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -76,6 +250,8 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
   const suppressNextClickRef = useRef(false);
   const [hasClipboard, setHasClipboard] = useState(false);
   const stack = useCommandStack();
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/templates/${templateId}`);
@@ -125,13 +301,15 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
 
   const hasPdf = data?.version.hasPdf ?? false;
   // PRD_폼솔루션 §7.1.1: 편집 완료(draft가 아님) 후에는 PDF·필드·좌표를 수정할 수 없다.
-  const readOnly = data ? data.template.status !== "draft" : false;
+  // 2026-08-25: 실제로 한 매라도 인쇄(SOBP 발급)했으면 draft로 되돌려도 다시 편집할 수
+  // 없다 — 그 뒤로는 복제해서 새 양식을 만들어야 한다.
+  const printed = (data?.template.printedCount ?? 0) > 0;
+  const readOnly = data ? data.template.status !== "draft" || printed : false;
   const allFields = data?.fields ?? [];
   const fields = allFields.filter((f) => f.pageNo === pageNo);
   const repeatGroups = (data?.repeatGroups ?? []).filter((g) => g.pageNo === pageNo);
   const selected = allFields.find((f) => f.id === selectedId) ?? null;
   const selectedGroup = (data?.repeatGroups ?? []).find((g) => g.id === selectedGroupId) ?? null;
-  const otherCheckFields = allFields.filter((f) => f.type === "check" && f.id !== selectedId);
 
   function patchLocalField(id: string, patch: Partial<FieldDTO>) {
     setData((d) => (d ? { ...d, fields: d.fields.map((f) => (f.id === id ? { ...f, ...patch } : f)) } : d));
@@ -179,12 +357,12 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       h: DEFAULT_BOX.h,
     };
     const label = {
-      text: "새 텍스트",
-      number: "새 숫자",
-      date: "새 날짜",
-      time: "새 시간",
-      check: "새 체크",
-      choice: "새 선택",
+      text: s.newTextLabel,
+      number: s.newNumberLabel,
+      date: s.newDateLabel,
+      time: s.newTimeLabel,
+      check: s.newCheckLabel,
+      choice: s.newChoiceLabel,
     }[type];
     let createdId: string | null = null;
     await stack.run({
@@ -226,7 +404,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         pageNo: selected.pageNo,
-        label: `${selected.label} 복사`,
+        label: s.copySuffix(selected.label),
         type: selected.type,
         box,
         required: selected.required,
@@ -364,38 +542,6 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     setSelectedGroupId(id);
   }
 
-  async function createRepeatGroup(opts: {
-    label: string;
-    maxRows: number;
-    blankRowPolicy: "exclude" | "include";
-    useRowNumber: boolean;
-  }) {
-    const res = await fetch(`/api/templates/${templateId}/repeat-groups`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...opts, fieldIds: multiSelectIds }),
-    });
-    if (res.ok) {
-      const group = await res.json();
-      stack.record({
-        label: "반복행 생성",
-        do: () => {},
-        undo: async () => {
-          await fetch(`/api/templates/${templateId}/repeat-groups/${group.id}`, { method: "DELETE" });
-          setSelectedGroupId(null);
-          await load();
-        },
-      });
-      setMultiSelectIds([]);
-      setGroupModalOpen(false);
-      await load();
-      setSelectedGroupId(group.id);
-    } else {
-      const json = await res.json();
-      setActionError(json.error === "FIELDS_MUST_SHARE_PAGE" ? "같은 페이지의 필드만 묶을 수 있습니다." : "반복행 생성 실패");
-    }
-  }
-
   // PRD_양식편집기_상세 §14.1: 이미 좌표가 잡혀 있는 개별 필드(주로 check)들을 다시 그리지
   // 않고 그대로 옵션 영역으로 재사용해 선택 필드 하나로 묶는다.
   async function mergeToChoice(opts: { label: string; mode: "single" | "multiple" }) {
@@ -440,7 +586,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     } else {
       const json = await res.json();
       setActionError(
-        json.error === "FIELDS_MUST_SHARE_PAGE" ? "같은 페이지의 필드만 묶을 수 있습니다." : "선택 필드로 묶기 실패"
+        json.error === "FIELDS_MUST_SHARE_PAGE" ? s.errorSharePage : s.errorMergeFailed
       );
     }
   }
@@ -495,22 +641,20 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     // 병합된 선택(choice) 필드는 삭제하면 良/否 같은 개별 판정 영역 정의가 통째로 사라진다.
     // 되돌릴 수 없는 선택이라 삭제 전에 "개별 필드로 복원할지"부터 물어본다.
     if (field.type === "choice" && field.choiceOptions.length > 0) {
-      const restore = window.confirm(
-        `"${field.label}"은(는) ${field.choiceOptions.length}개 옵션이 합쳐진 선택 필드입니다.\n\n확인: 개별 체크 필드 ${field.choiceOptions.length}개로 복원\n취소: 다음 화면에서 완전 삭제 여부 선택`
-      );
+      const restore = window.confirm(s.confirmRestoreChoice(field.label, field.choiceOptions.length));
       if (restore) {
         const r = await fetch(`/api/templates/${templateId}/fields/${field.id}/split-choice`, { method: "POST" });
         if (r.ok) {
           if (selectedId === field.id) setSelectedId(null);
           await load();
         } else if (r.status === 409) {
-          setActionError("잠긴 필드는 복원할 수 없습니다.");
+          setActionError(s.errorLockedRestore);
         } else {
-          setActionError("옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.");
+          setActionError(s.errorNoRegionRestore);
         }
         return;
       }
-      const reallyDelete = window.confirm(`"${field.label}"과 옵션 ${field.choiceOptions.length}개를 모두 삭제합니다. 계속할까요?`);
+      const reallyDelete = window.confirm(s.confirmDeleteChoice(field.label, field.choiceOptions.length));
       if (!reallyDelete) return;
     }
     const snapshot = { ...field };
@@ -539,7 +683,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       });
       await load();
     } else if (res.status === 409) {
-      setActionError("잠긴 필드는 삭제할 수 없습니다.");
+      setActionError(s.errorLockedDelete);
     }
   }
 
@@ -550,9 +694,9 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       if (selectedId === field.id) setSelectedId(null);
       await load();
     } else if (r.status === 409) {
-      setActionError("잠긴 필드는 복원할 수 없습니다.");
+      setActionError(s.errorLockedRestore);
     } else {
-      setActionError("옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.");
+      setActionError(s.errorNoRegionRestore);
     }
   }
 
@@ -581,11 +725,11 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       });
       const json = await res.json();
       if (!res.ok) {
-        setActionError(json.message ?? "AI 자동 추천 실패");
+        setActionError(json.message ?? s.errorAiDetectFailed);
         return;
       }
       if (json.filteredOutCount > 0) {
-        setAiFilteredInfo(`신뢰도가 낮거나 영역이 너무 작은 후보 ${json.filteredOutCount}개는 자동으로 제외했습니다.`);
+        setAiFilteredInfo(s.aiFilteredInfo(json.filteredOutCount));
       }
       await load();
     } finally {
@@ -620,6 +764,24 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     }
   }
 
+  async function savePrintCopies(count: number) {
+    beginSave();
+    try {
+      const res = await fetch(`/api/templates/${templateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ printCopies: count }),
+      });
+      if (res.ok) {
+        await load();
+        setSobpMenuOpen(false);
+      }
+      endSave(res.ok);
+    } catch {
+      endSave(false);
+    }
+  }
+
   // draft → printable은 구조 검사를 통과해야 하므로 /activate를 거친다.
   async function activateTemplate() {
     setActionError(null);
@@ -629,7 +791,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       const json = await res.json();
       if (!res.ok) {
         const reasons = (json.issues ?? []).map((i: { message: string }) => i.message).join(", ");
-        setActionError(reasons || json.reason || "인쇄 가능 전환 실패");
+        setActionError(reasons || json.reason || s.errorPrintableFailed);
       }
       await load();
     } finally {
@@ -654,6 +816,23 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     }
   }
 
+  // 인쇄가 끝나 편집이 영구 잠긴 양식을 고치고 싶을 때 쓰는 유일한 방법 — 필드·반복행·
+  // Excel 템플릿까지 그대로 복사한 새 draft 양식을 만들어 그 편집기로 이동한다.
+  async function duplicateTemplate() {
+    setStatusBusy(true);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/duplicate`, { method: "POST" });
+      if (res.ok) {
+        const created = await res.json();
+        router.push(`/editor/${created.id}`);
+      } else {
+        setStatusBusy(false);
+      }
+    } catch {
+      setStatusBusy(false);
+    }
+  }
+
   async function uploadPdf(file: File) {
     setUploadBusy(true);
     setActionError(null);
@@ -668,7 +847,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
         body: JSON.stringify({ pdfDataUri, pageCount: pdf.numPages }),
       });
       if (!res.ok) {
-        setActionError("PDF 업로드에 실패했습니다.");
+        setActionError(s.errorPdfUploadFailed);
         return;
       }
       setPageNo(1);
@@ -1015,7 +1194,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bind whenever selection/stack identity changes
   }, [selected, multiSelectIds, stack, optionDraw]);
 
-  if (!data) return <div className="p-8 text-sm text-slate-400">불러오는 중…</div>;
+  if (!data) return <div className="p-8 text-sm text-slate-400">{s.loading}</div>;
 
   return (
     <main className="flex flex-col h-full">
@@ -1025,9 +1204,9 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           <Link
             href="/templates"
             className="text-sm text-slate-400 hover:text-[var(--foreground)] px-1.5 py-1 rounded cursor-pointer"
-            title="양식 관리로 돌아가기"
+            title={s.backTitle}
           >
-            ← 뒤로
+            {s.back}
           </Link>
           {editingName ? (
             <input
@@ -1049,7 +1228,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
                 setNameDraft(data.template.name);
                 setEditingName(true);
               }}
-              title="클릭해서 양식명 수정"
+              title={s.nameEditTitle}
             >
               {data.template.name}
               {!readOnly && <span className="text-xs text-slate-400">✎</span>}
@@ -1057,35 +1236,80 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           )}
           <span className={`text-xs ${saveStatus === "error" ? "text-red-600" : "text-slate-400"}`}>
             {saveStatus === "saving"
-              ? "저장 중…"
+              ? s.saveStatusSaving
               : saveStatus === "error"
-                ? "저장 실패 — 저장 버튼을 눌러 다시 확인하세요"
+                ? s.saveStatusError
                 : lastSavedAt
-                  ? `${lastSavedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}에 저장됨`
-                  : "자동 저장"}
+                  ? s.savedAt(lastSavedAt.toLocaleTimeString(s.timeLocale, { hour: "2-digit", minute: "2-digit", second: "2-digit" }))
+                  : s.autoSave}
           </span>
           <div className="flex-1" />
-          <Button onClick={manualSave} disabled={saveStatus === "saving"} title="서버에 저장된 최신 상태를 다시 불러와 확인합니다">
-            💾 저장
+          <Button onClick={manualSave} disabled={saveStatus === "saving"} title={s.saveButtonTitle}>
+            {s.saveButton}
           </Button>
-          <Button onClick={() => setTestDialogOpen(true)} title="빈 원본 양식에서 필드 출력 구조·CSV 열 구성 확인">
-            ▷ 데이터 테스트
+          <Button onClick={() => setTestDialogOpen(true)} title={s.testButtonTitle}>
+            {s.testButton}
           </Button>
-          <Button onClick={() => setExcelModalOpen(true)} title="고객 엑셀 서식에 [데이터키]를 넣어 업로드하면 확정값으로 치환해 출력합니다">
+          <Button onClick={() => setExcelModalOpen(true)} title={s.excelButtonTitle}>
             📊 Data Template
           </Button>
+          {/* 인쇄 부수: "이 양식으로 몇 부를 인쇄할 예정인지" 참고용 설정(2026-08-25, "10부
+              인쇄해주세요"가 자연스러운 표현이라 매수 아닌 부수로 정정). 페이지마다 새
+              SOBP가 발급되므로 필요 SOBP 수 = 페이지 수 × 부수 — 동일 SOBP 공유는 이 설정
+              범위 밖, PRD_폼솔루션 §14 미결정#1은 계속 미해결. */}
+          <div className="relative">
+            <Button
+              onClick={() => {
+                setSobpDraft(data.template.printCopies);
+                setSobpMenuOpen((v) => !v);
+              }}
+              disabled={readOnly}
+              title={s.sobpButtonTitle}
+            >
+              {s.sobpButton}
+              {data.template.printCopies > 1 && (
+                <span className="ml-1 rounded-full bg-[var(--color-brand-100)] px-1.5 text-[10px] text-[var(--color-brand-600)]">
+                  {data.template.printCopies}
+                </span>
+              )}
+            </Button>
+            {sobpMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-80 rounded-lg border border-[var(--color-border)] bg-white shadow-lg z-20 p-4 text-xs">
+                <div className="text-sm font-medium text-[var(--foreground)] mb-1">{s.sobpPopoverTitle}</div>
+                <p className="text-slate-400 mb-3">{s.sobpPopoverDesc}</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <input
+                    type="number"
+                    min={1}
+                    value={sobpDraft}
+                    onChange={(e) => setSobpDraft(Math.max(1, Number(e.target.value) || 1))}
+                    className="w-20 rounded-md border border-[var(--color-border)] px-2 py-1 text-sm"
+                  />
+                  <span className="text-slate-500">{s.sobpCountLabel}</span>
+                </div>
+                <p className="text-slate-400 mb-3">{s.sobpTotalLabel(data.version.pageCount, sobpDraft, data.version.pageCount * sobpDraft)}</p>
+                <div className="flex justify-end gap-1.5">
+                  <Button onClick={() => setSobpMenuOpen(false)}>{s.sobpClose}</Button>
+                  <Button variant="primary" onClick={() => savePrintCopies(sobpDraft)}>
+                    {s.sobpSave}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
           {/* 상태는 편집기 전체 잠금 여부를 결정하는 중요한 토글이라, 눈에 잘 띄게 세그먼트
               버튼 형태로 뒀다(대시보드 고객사/시스템 토글과 같은 스타일). 실패 사유는 여기
               고정 표시하지 않고, 시도한 순간에만 아래 배너로 보여준다. */}
           <div className="flex rounded-lg border border-[var(--color-border)] bg-white p-0.5 text-xs">
             <button
-              onClick={() => data.template.status !== "draft" && reopenForEditing()}
-              disabled={statusBusy}
-              className={`rounded-md px-3 py-1.5 font-medium cursor-pointer transition-colors ${
+              onClick={() => !printed && data.template.status !== "draft" && reopenForEditing()}
+              disabled={statusBusy || printed}
+              title={printed ? s.printedLockedTitle : undefined}
+              className={`rounded-md px-3 py-1.5 font-medium transition-colors ${printed ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ${
                 data.template.status === "draft" ? "bg-slate-600 text-white" : "text-slate-500 hover:text-[var(--foreground)]"
               }`}
             >
-              편집 중
+              {s.statusEditing}
             </button>
             <button
               onClick={() => data.template.status !== "printable" && activateTemplate()}
@@ -1096,69 +1320,69 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
                   : "text-slate-500 hover:text-[var(--foreground)]"
               }`}
             >
-              인쇄 가능
+              {s.statusPrintable}
             </button>
           </div>
+          {printed && (
+            <Button onClick={duplicateTemplate} disabled={statusBusy} title={s.printedLockedTitle}>
+              {statusBusy ? s.duplicating : s.duplicate}
+            </Button>
+          )}
         </div>
 
         {/* 2행: 선택/이동 · 실행취소/다시실행 · 복사/붙여넣기/삭제 · 확대축소 · AI 추천 · 페이지 */}
         <div className="px-4 py-2 flex items-center gap-1.5 flex-wrap">
-          <ToolGroup label="도구">
-            <ToolButton active={tool.mode === "select"} onClick={() => setTool({ mode: "select" })} title="선택 (필드를 클릭·드래그해서 선택·이동)">
-              ⛶ 선택
+          <ToolGroup label={s.toolGroupTool}>
+            <ToolButton active={tool.mode === "select"} onClick={() => setTool({ mode: "select" })} title={s.toolSelectTitle}>
+              {s.toolSelect}
             </ToolButton>
-            <ToolButton active={tool.mode === "pan"} onClick={() => setTool({ mode: "pan" })} title="이동 (캔버스를 드래그해서 화면 이동)">
-              ✋ 이동
+            <ToolButton active={tool.mode === "pan"} onClick={() => setTool({ mode: "pan" })} title={s.toolPanTitle}>
+              {s.toolPan}
             </ToolButton>
           </ToolGroup>
 
-          <ToolGroup label="실행 내역">
-            <Button onClick={() => stack.undo()} disabled={!stack.canUndo} title="실행 취소 (Cmd/Ctrl+Z)">
-              ↩ 실행 취소
+          <ToolGroup label={s.toolGroupHistory}>
+            <Button onClick={() => stack.undo()} disabled={!stack.canUndo} title={s.undoTitle}>
+              {s.undo}
             </Button>
-            <Button onClick={() => stack.redo()} disabled={!stack.canRedo} title="다시 실행 (Cmd/Ctrl+Shift+Z)">
-              ↪ 다시 실행
+            <Button onClick={() => stack.redo()} disabled={!stack.canRedo} title={s.redoTitle}>
+              {s.redo}
             </Button>
           </ToolGroup>
 
           {!readOnly && (
-            <ToolGroup label="필드">
-              <Button onClick={copySelected} disabled={!selected && multiSelectIds.length === 0} title="복사 (Cmd/Ctrl+C)">
-                ⧉ 복사
+            <ToolGroup label={s.toolGroupField}>
+              <Button onClick={copySelected} disabled={!selected && multiSelectIds.length === 0} title={s.copyTitle}>
+                {s.copy}
               </Button>
-              <Button onClick={pasteClipboard} disabled={!hasClipboard} title="붙여넣기 (Cmd/Ctrl+V)">
-                📋 붙여넣기
+              <Button onClick={pasteClipboard} disabled={!hasClipboard} title={s.pasteTitle}>
+                {s.paste}
               </Button>
-              <Button onClick={deleteSelectedFields} disabled={!selected && multiSelectIds.length === 0} title="삭제 (Delete)">
-                🗑 삭제
+              <Button onClick={deleteSelectedFields} disabled={!selected && multiSelectIds.length === 0} title={s.deleteTitle}>
+                {s.delete}
               </Button>
             </ToolGroup>
           )}
 
-          <ToolGroup label="화면">
-            <Button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} title="축소">
+          <ToolGroup label={s.toolGroupScreen}>
+            <Button onClick={zoomOut} disabled={zoom <= ZOOM_MIN} title={s.zoomOutTitle}>
               −
             </Button>
             <span className="text-xs text-slate-400 w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-            <Button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} title="확대">
+            <Button onClick={zoomIn} disabled={zoom >= ZOOM_MAX} title={s.zoomInTitle}>
               +
             </Button>
-            <Button onClick={fitToScreen} title="화면 맞춤">
-              화면 맞춤
+            <Button onClick={fitToScreen} title={s.fitToScreen}>
+              {s.fitToScreen}
             </Button>
           </ToolGroup>
 
-          {!readOnly && multiSelectIds.length > 0 && (
-            <button className="text-sm bg-teal-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer" onClick={() => setGroupModalOpen(true)}>
-              반복행으로 묶기 ({multiSelectIds.length})
-            </button>
-          )}
           {!readOnly && multiSelectIds.length >= 2 && (
             <button
               className="text-sm bg-violet-600 text-white rounded-lg px-3 py-1.5 font-medium cursor-pointer"
               onClick={() => setMergeModalOpen(true)}
             >
-              선택 필드로 묶기 ({multiSelectIds.length})
+              {s.groupIntoChoice(multiSelectIds.length)}
             </button>
           )}
           {!readOnly && (
@@ -1167,23 +1391,23 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
               onClick={runAiDetection}
               disabled={!hasPdf || aiBusy}
             >
-              {aiBusy ? "AI 분석 중… (최대 2분)" : "✦ AI 자동 추천"}
+              {aiBusy ? s.aiDetectRunning : s.aiDetect}
             </button>
           )}
 
           <div className="flex-1" />
           {data.version.pageCount > 1 && (
             <div className="flex items-center gap-1">
-              <Button onClick={() => setPageNo((p) => Math.max(1, p - 1))} disabled={pageNo <= 1} title="이전 페이지">
+              <Button onClick={() => setPageNo((p) => Math.max(1, p - 1))} disabled={pageNo <= 1} title={s.prevPageTitle}>
                 ‹
               </Button>
               <span className="text-xs text-slate-400 tabular-nums">
-                {pageNo} / {data.version.pageCount}페이지
+                {s.pageOf(pageNo, data.version.pageCount)}
               </span>
               <Button
                 onClick={() => setPageNo((p) => Math.min(data.version.pageCount, p + 1))}
                 disabled={pageNo >= data.version.pageCount}
-                title="다음 페이지"
+                title={s.nextPageTitle}
               >
                 ›
               </Button>
@@ -1215,11 +1439,6 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           onArmAdd={(type) => !readOnly && setTool(type ? { mode: "add", type } : { mode: "select" })}
           armedType={tool.mode === "add" ? tool.type : null}
           onDragCardStart={setDragType}
-          onGroupCardClick={() =>
-            !readOnly &&
-            (multiSelectIds.length > 0 ? setGroupModalOpen(true) : setActionError("먼저 첫 행 필드를 다중 선택하세요 (Shift+클릭)."))
-          }
-          onReplacePdf={(file) => !readOnly && uploadPdf(file)}
         />
 
         {!hasPdf ? (
@@ -1231,9 +1450,9 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
             className="flex-1 overflow-auto bg-slate-100 p-8"
             style={{ cursor: tool.mode === "pan" ? "grab" : "default" }}
           >
-            {uploadBusy && <p className="text-sm text-slate-400 mb-2">PDF 업로드 중…</p>}
+            {uploadBusy && <p className="text-sm text-slate-400 mb-2">{s.pdfUploading}</p>}
             {!pdfBuffer ? (
-              <p className="text-sm text-slate-400">PDF 불러오는 중…</p>
+              <p className="text-sm text-slate-400">{s.pdfLoading}</p>
             ) : (
               <div
                 ref={canvasRef}
@@ -1375,7 +1594,7 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
         )}
 
         <aside className={`w-80 bg-white border-l border-[var(--color-border)] overflow-y-auto ${readOnly ? "pointer-events-none opacity-60" : ""}`}>
-          {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">필드를 선택하세요.</p>}
+          {!selected && !selectedGroup && <p className="p-4 text-sm text-slate-400">{s.selectFieldPrompt}</p>}
           {selectedGroup && (
             <GroupPropertiesPanel
               group={selectedGroup}
@@ -1389,7 +1608,6 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
           {selected && (
             <FieldPropertiesPanel
               field={selected}
-              otherCheckFields={otherCheckFields}
               onPatchLocal={(patch) => patchLocalField(selected.id, patch)}
               onSave={(body) => saveField(selected.id, body)}
               onSaveType={(type) => saveField(selected.id, { type }).then(load)}
@@ -1409,14 +1627,10 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       </div>
 
       <footer className="bg-white border-t border-[var(--color-border)] px-4 py-1.5 flex items-center gap-4 text-xs text-slate-400">
-        <span>페이지 {pageNo}/{data.version.pageCount}</span>
-        <span>선택 {selectedId || selectedGroupId ? 1 : multiSelectIds.length}개</span>
-        <span>정규화 좌표 (0~1)</span>
+        <span>{s.footerPage(pageNo, data.version.pageCount)}</span>
+        <span>{s.footerSelected(selectedId || selectedGroupId ? 1 : multiSelectIds.length)}</span>
+        <span>{s.footerCoord}</span>
       </footer>
-
-      {groupModalOpen && (
-        <CreateRepeatGroupModal fieldCount={multiSelectIds.length} onCancel={() => setGroupModalOpen(false)} onCreate={createRepeatGroup} />
-      )}
 
       {mergeModalOpen && (
         <MergeToChoiceModal fieldCount={multiSelectIds.length} onCancel={() => setMergeModalOpen(false)} onCreate={mergeToChoice} />

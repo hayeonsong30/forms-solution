@@ -65,7 +65,6 @@ function configNote(f: OcrFieldRequest): string {
   if (f.type === "text" && c.text) {
     const t = c.text;
     if (t.charPolicy && t.charPolicy !== "all") parts.push(`허용 문자=${t.charPolicy}`);
-    if (t.customPattern) parts.push(`패턴=${t.customPattern}`);
     if (t.maxLength) parts.push(`최대길이=${t.maxLength}`);
     if (t.writingMode === "multiline") parts.push("여러 줄 입력 가능");
     if (t.preserveNewline) parts.push("줄바꿈 그대로 보존");
@@ -86,7 +85,6 @@ function configNote(f: OcrFieldRequest): string {
     if (ch.trueMarks?.length) parts.push(`true로 볼 표시=[${ch.trueMarks.join(", ")}]`);
     if (ch.falseMarks?.length) parts.push(`false로 볼 표시=[${ch.falseMarks.join(", ")}]`);
     if (ch.blankValue) parts.push(`빈칸 처리=${ch.blankValue}`);
-    if (ch.ambiguousPolicy) parts.push(`애매하면=${ch.ambiguousPolicy}`);
     // symbol 모드: true/false로 뭉개지 말고 실제로 그려진 기호 문자 그대로 반환하게 한다.
     if (ch.outputMode === "symbol") {
       parts.push(
@@ -99,12 +97,10 @@ function configNote(f: OcrFieldRequest): string {
   if (f.type === "date" && c.date) {
     const d = c.date;
     if (d.inputFormat && d.inputFormat !== "auto") parts.push(`입력형식=${d.inputFormat}`);
-    if (d.missingYearPolicy) parts.push(`연도 누락 시=${d.missingYearPolicy}`);
   }
   if (f.type === "time" && c.time) {
     const t = c.time;
     if (t.inputMode && t.inputMode !== "auto") parts.push(`입력형식=${t.inputMode}`);
-    if (t.minuteStep && t.minuteStep !== "free") parts.push(`분 단위=${t.minuteStep}`);
   }
   if (f.type === "choice" && c.choice) {
     parts.push(c.choice.mode === "multiple" ? "복수 선택 가능" : "단일 선택만 가능");

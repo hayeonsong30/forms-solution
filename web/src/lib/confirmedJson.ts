@@ -13,7 +13,7 @@ export type ConfirmedDocumentJson = {
   fields: Record<string, string | null>;
   repeats: Record<string, Array<Record<string, string | null>>>;
   // 다중 선택 choice 필드의 CSV 방식 적용에 필요한 메타 (§14.1 csvPolicy).
-  choiceMeta: Record<string, { csvPolicy: "delimiter" | "one_column_per_option" | "json_string"; options: string[] }>;
+  choiceMeta: Record<string, { csvPolicy: "delimiter" | "one_column_per_option"; options: string[] }>;
   // PRD_반복행 §5.5: 빈 행 판정은 OCR/작성된 값 기준이지, 아래 fixedRows(PDF에 이미 인쇄된
   // 고정값)는 판정에서 제외한다 — fixedRows만 있고 나머지가 비어있으면 여전히 빈 행이다.
   repeatMeta: Record<string, { blankRowPolicy: "exclude" | "include"; fixedRows: FixedRowValue[] }>;
@@ -131,10 +131,6 @@ function applyChoiceCsvPolicy(
       continue;
     }
     const selected = value ? value.split(",").map((s) => s.trim()).filter(Boolean) : [];
-    if (meta.csvPolicy === "json_string") {
-      result[key] = JSON.stringify(selected);
-      continue;
-    }
     // one_column_per_option: 옵션별로 열을 분리하고 각 열에 "true"/"false"를 담는다.
     for (const option of meta.options) {
       result[`${key}_${option}`] = String(selected.includes(option));

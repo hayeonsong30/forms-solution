@@ -2,8 +2,70 @@
 
 import { useEffect, useState } from "react";
 import { arrayBufferToBase64 } from "@/lib/base64";
+import { useLanguage, type Lang } from "@/lib/language";
 
-type Placeholder = { label: string; dataKey: string; type: string; system?: boolean };
+const STRINGS = {
+  ko: {
+    modalTitle: "Data Template 설정",
+    docTitle: "Doc Excel",
+    listTitle: "List Excel",
+    dropHint: ".xlsx 파일을 끌어놓거나 선택하세요.",
+    validating: "검사 중…",
+    selectFile: "파일 선택",
+    statusLabel: "상태: ",
+    available: (fileName: string) => `사용 가능 (${fileName})`,
+    unregistered: "미등록",
+    generateSample: "샘플 생성",
+    download: "다운로드",
+    delete: "삭제",
+    unknownPlaceholderSuggested: (key: string, suggestedKey: string) => `[${key}] 없는 키 — [${suggestedKey}] 아닌가요?`,
+    unknownPlaceholder: (key: string) => `[${key}] 없는 키`,
+    invalidSyntax: (key: string) => `[${key}] 잘못된 문법`,
+    repeatFieldNotSupported: (key: string) => `[${key}] 지원하지 않는 반복행 문법`,
+    confirmDelete: "템플릿을 삭제할까요?",
+  },
+  ja: {
+    modalTitle: "データテンプレート設定",
+    docTitle: "Doc Excel",
+    listTitle: "List Excel",
+    dropHint: ".xlsxファイルをドラッグ＆ドロップするか選択してください。",
+    validating: "検査中…",
+    selectFile: "ファイル選択",
+    statusLabel: "状態: ",
+    available: (fileName: string) => `利用可能（${fileName}）`,
+    unregistered: "未登録",
+    generateSample: "サンプル生成",
+    download: "ダウンロード",
+    delete: "削除",
+    unknownPlaceholderSuggested: (key: string, suggestedKey: string) => `[${key}] 存在しないキー — [${suggestedKey}] ではありませんか?`,
+    unknownPlaceholder: (key: string) => `[${key}] 存在しないキー`,
+    invalidSyntax: (key: string) => `[${key}] 不正な構文`,
+    repeatFieldNotSupported: (key: string) => `[${key}] 対応していない繰り返し行の構文`,
+    confirmDelete: "テンプレートを削除しますか?",
+  },
+} satisfies Record<
+  Lang,
+  {
+    modalTitle: string;
+    docTitle: string;
+    listTitle: string;
+    dropHint: string;
+    validating: string;
+    selectFile: string;
+    statusLabel: string;
+    available: (fileName: string) => string;
+    unregistered: string;
+    generateSample: string;
+    download: string;
+    delete: string;
+    unknownPlaceholderSuggested: (key: string, suggestedKey: string) => string;
+    unknownPlaceholder: (key: string) => string;
+    invalidSyntax: (key: string) => string;
+    repeatFieldNotSupported: (key: string) => string;
+    confirmDelete: string;
+  }
+>;
+
 type ValidationError = { code: string; key: string; sheet: string; cell: string; suggestedKey?: string };
 type ValidationResult = {
   status: "valid" | "invalid";
@@ -22,6 +84,8 @@ type ExcelTemplateMeta = {
 // PRD_Excel_플레이스홀더_간단버전 §5: "Excel 템플릿 설정" — 고객이 자기 엑셀 서식에
 // [데이터키]를 넣어 올리면 검사하고, 확정 문서로 치환 출력할 수 있게 등록해준다.
 export function ExcelTemplateModal({ versionId, onClose }: { versionId: string; onClose: () => void }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
@@ -29,73 +93,24 @@ export function ExcelTemplateModal({ versionId, onClose }: { versionId: string; 
         className="w-full max-w-3xl max-h-[85vh] overflow-y-auto bg-white rounded-lg"
       >
         <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white">
-          <h2 className="text-sm font-semibold text-slate-900">Data Template 설정</h2>
+          <h2 className="text-sm font-semibold text-slate-900">{s.modalTitle}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer text-lg leading-none">
             ×
           </button>
         </div>
         <div className="p-5">
-          <PlaceholderList versionId={versionId} />
-          <ExcelTemplateSection versionId={versionId} type="doc" title="Doc Excel (문서 1건 출력)" />
-          <ExcelTemplateSection versionId={versionId} type="list" title="List Excel (반복행 고정 슬롯 출력)" />
+          <ExcelTemplateSection versionId={versionId} type="doc" title={s.docTitle} />
+          <ExcelTemplateSection versionId={versionId} type="list" title={s.listTitle} />
         </div>
       </div>
     </div>
   );
 }
 
-function PlaceholderList({ versionId }: { versionId: string }) {
-  const [placeholders, setPlaceholders] = useState<Placeholder[]>([]);
-  const [copied, setCopied] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`/api/template-versions/${versionId}/excel-placeholders`)
-      .then((r) => r.json())
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
-      .then((d) => setPlaceholders(d.placeholders));
-  }, [versionId]);
-
-  function copy(key: string) {
-    navigator.clipboard.writeText(`[${key}]`);
-    setCopied(key);
-    setTimeout(() => setCopied(null), 1200);
-  }
-
-  const regular = placeholders.filter((p) => !p.system);
-  const system = placeholders.filter((p) => p.system);
-
-  return (
-    <section className="bg-white border border-slate-200 rounded-lg mb-6">
-      <div className="px-4 py-3 border-b border-slate-200">
-        <h3 className="text-sm font-semibold text-slate-900">① 사용 가능한 플레이스홀더</h3>
-        <p className="text-xs text-slate-400 mt-0.5">고객 엑셀 셀에 그대로 붙여넣으세요. (List Excel은 반복행 [데이터키.NN]도 별도 지원)</p>
-      </div>
-      <div className="max-h-56 overflow-auto">
-        <table className="w-full text-sm">
-          <tbody className="divide-y divide-slate-100">
-            {[...regular, ...system].map((p) => (
-              <tr key={p.dataKey}>
-                <td className="px-4 py-2 text-slate-700">{p.label}</td>
-                <td className="px-4 py-2 font-mono text-xs text-slate-500">[{p.dataKey}]</td>
-                <td className="px-4 py-2">
-                  <button
-                    onClick={() => copy(p.dataKey)}
-                    className="text-xs text-slate-500 border border-slate-200 rounded px-2 py-1 cursor-pointer hover:bg-slate-50"
-                  >
-                    {copied === p.dataKey ? "복사됨" : "복사"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
 // PRD_Excel_플레이스홀더_간단버전 §5 화면 목업: "Excel 파일을 끌어놓거나 선택하세요."
 function Dropzone({ busy, onFile }: { busy: boolean; onFile: (file: File) => void }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [dragOver, setDragOver] = useState(false);
   const inputId = "excel-template-file-input";
 
@@ -120,12 +135,12 @@ function Dropzone({ busy, onFile }: { busy: boolean; onFile: (file: File) => voi
         dragOver ? "border-slate-500 bg-slate-50" : "border-slate-200"
       } ${busy ? "opacity-50 pointer-events-none" : ""}`}
     >
-      <p className="text-sm text-slate-500">.xlsx 파일을 끌어놓거나 선택하세요.</p>
+      <p className="text-sm text-slate-500">{s.dropHint}</p>
       <label
         htmlFor={inputId}
         className="inline-block mt-3 text-sm bg-slate-900 text-white rounded-md px-3.5 py-2 cursor-pointer hover:bg-slate-800"
       >
-        {busy ? "검사 중…" : "파일 선택"}
+        {busy ? s.validating : s.selectFile}
       </label>
       <input
         id={inputId}
@@ -140,9 +155,10 @@ function Dropzone({ busy, onFile }: { busy: boolean; onFile: (file: File) => voi
 }
 
 function ExcelTemplateSection({ versionId, type, title }: { versionId: string; type: "doc" | "list"; title: string }) {
+  const { lang } = useLanguage();
+  const s = STRINGS[lang];
   const [meta, setMeta] = useState<ExcelTemplateMeta | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
-  const [pendingFile, setPendingFile] = useState<{ name: string; dataUri: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
@@ -155,46 +171,40 @@ function ExcelTemplateSection({ versionId, type, title }: { versionId: string; t
     refresh();
   }, [versionId, type]);
 
+  // 검증 결과 표/플레이스홀더 목록 없이 업로드 한 번으로 끝낸다 — 통과하면 바로 저장하고,
+  // 실패하면 오류만 간단히 보여준다(2026-08-25, 사용자 결정).
   async function onFileSelected(file: File) {
     setBusy(true);
     setValidation(null);
     try {
       const buffer = await file.arrayBuffer();
       const fileDataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${arrayBufferToBase64(buffer)}`;
-      setPendingFile({ name: file.name, dataUri: fileDataUri });
-      const res = await fetch(`/api/template-versions/${versionId}/excel-template/validate`, {
+      const validateRes = await fetch(`/api/template-versions/${versionId}/excel-template/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, fileName: file.name, fileDataUri }),
       });
-      const json = await res.json();
-      setValidation(res.ok ? json : (json.validationResult ?? { status: "invalid", validPlaceholders: [], errors: [] }));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function save() {
-    if (!pendingFile) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/template-versions/${versionId}/excel-template`, {
+      const validateJson = await validateRes.json();
+      const result: ValidationResult = validateRes.ok
+        ? validateJson
+        : (validateJson.validationResult ?? { status: "invalid", validPlaceholders: [], errors: [] });
+      if (result.status !== "valid") {
+        setValidation(result);
+        return;
+      }
+      const saveRes = await fetch(`/api/template-versions/${versionId}/excel-template`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, name: pendingFile.name, fileName: pendingFile.name, fileDataUri: pendingFile.dataUri }),
+        body: JSON.stringify({ type, name: file.name, fileName: file.name, fileDataUri }),
       });
-      if (res.ok) {
-        setPendingFile(null);
-        setValidation(null);
-        await refresh();
-      }
+      if (saveRes.ok) await refresh();
     } finally {
       setBusy(false);
     }
   }
 
   async function remove() {
-    if (!window.confirm("템플릿을 삭제할까요?")) return;
+    if (!window.confirm(s.confirmDelete)) return;
     await fetch(`/api/template-versions/${versionId}/excel-template?type=${type}`, { method: "DELETE" });
     await refresh();
   }
@@ -221,19 +231,20 @@ function ExcelTemplateSection({ versionId, type, title }: { versionId: string; t
         <div>
           <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            상태: {meta ? <span className="text-emerald-600 font-medium">사용 가능 ({meta.fileName})</span> : "미등록"}
+            {s.statusLabel}
+            {meta ? <span className="text-emerald-600 font-medium">{s.available(meta.fileName)}</span> : s.unregistered}
           </p>
         </div>
         {meta && (
           <div className="flex gap-1.5">
             <button onClick={sample} className="text-xs border border-slate-300 rounded px-2.5 py-1.5 cursor-pointer hover:bg-slate-50">
-              샘플 생성
+              {s.generateSample}
             </button>
             <button onClick={download} className="text-xs border border-slate-300 rounded px-2.5 py-1.5 cursor-pointer hover:bg-slate-50">
-              다운로드
+              {s.download}
             </button>
             <button onClick={remove} className="text-xs border border-red-200 text-red-600 rounded px-2.5 py-1.5 cursor-pointer hover:bg-red-50">
-              삭제
+              {s.delete}
             </button>
           </div>
         )}
@@ -241,52 +252,17 @@ function ExcelTemplateSection({ versionId, type, title }: { versionId: string; t
       <div className="p-4 space-y-3">
         <Dropzone busy={busy} onFile={onFileSelected} />
 
-        {validation && (
-          <div>
-            <table className="w-full text-xs">
-              <thead className="bg-slate-50 text-left text-slate-400">
-                <tr>
-                  <th className="px-2 py-1.5 font-medium">상태</th>
-                  <th className="px-2 py-1.5 font-medium">플레이스홀더</th>
-                  <th className="px-2 py-1.5 font-medium">위치</th>
-                  <th className="px-2 py-1.5 font-medium">설명</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {validation.validPlaceholders.map((v, i) => (
-                  <tr key={`v${i}`}>
-                    <td className="px-2 py-1.5 text-emerald-600 font-medium">정상</td>
-                    <td className="px-2 py-1.5 font-mono">[{v.key}]</td>
-                    <td className="px-2 py-1.5 text-slate-500">
-                      {v.sheet}!{v.cell}
-                    </td>
-                    <td className="px-2 py-1.5 text-slate-400">사용 가능</td>
-                  </tr>
-                ))}
-                {validation.errors.map((e, i) => (
-                  <tr key={`e${i}`}>
-                    <td className="px-2 py-1.5 text-red-600 font-medium">오류</td>
-                    <td className="px-2 py-1.5 font-mono">[{e.key}]</td>
-                    <td className="px-2 py-1.5 text-slate-500">
-                      {e.sheet}!{e.cell}
-                    </td>
-                    <td className="px-2 py-1.5 text-slate-400">
-                      {e.code === "UNKNOWN_PLACEHOLDER" && (e.suggestedKey ? `없는 키 — [${e.suggestedKey}] 아닌가요?` : "없는 키")}
-                      {e.code === "INVALID_PLACEHOLDER_SYNTAX" && "잘못된 문법"}
-                      {e.code === "REPEAT_FIELD_NOT_SUPPORTED" && "지원하지 않는 반복행 문법"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button
-              onClick={save}
-              disabled={validation.status !== "valid" || busy}
-              className="mt-3 text-sm bg-slate-900 text-white rounded-md px-3.5 py-2 cursor-pointer disabled:opacity-40 hover:bg-slate-800"
-            >
-              {busy ? "저장 중…" : "저장"}
-            </button>
-          </div>
+        {validation && validation.errors.length > 0 && (
+          <ul className="text-xs text-red-600 space-y-1 list-disc pl-4">
+            {validation.errors.map((e, i) => (
+              <li key={i}>
+                {e.code === "UNKNOWN_PLACEHOLDER" &&
+                  (e.suggestedKey ? s.unknownPlaceholderSuggested(e.key, e.suggestedKey) : s.unknownPlaceholder(e.key))}
+                {e.code === "INVALID_PLACEHOLDER_SYNTAX" && s.invalidSyntax(e.key)}
+                {e.code === "REPEAT_FIELD_NOT_SUPPORTED" && s.repeatFieldNotSupported(e.key)}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </section>

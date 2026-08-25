@@ -141,6 +141,13 @@ model Template {
   status           TemplateStatus @default(draft)
   printableReason  String?        @map("printable_reason")
   currentVersionId String?        @map("current_version_id")
+  // 이 양식으로 몇 부를 인쇄할 예정인지 — 페이지마다 새 SOBP가 발급되므로
+  // 실제 필요한 SOBP 수는 version.pageCount * printCopies. 인쇄 자체는 앱 밖에서
+  // 이뤄지므로 이 값은 계획/참고용이고 문서 생성 로직에는 영향을 주지 않는다.
+  // 동일 SOBP를 여러 부수가 공유하는 방식(롤 인쇄 등)은 이 설정의 범위 밖이다
+  // ("10부 인쇄해주세요"가 자연스러운 표현이라 매수 아닌 부수로 정정, 2026-08-25 —
+  // PRD_폼솔루션 §14 미결정#1은 계속 미해결).
+  printCopies      Int            @default(1) @map("print_copies")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
 
@@ -302,6 +309,10 @@ model Document {
   orgId             String         @map("org_id")
   org               Organization   @relation(fields: [orgId], references: [id])
   ncode             String?
+  // 페이지마다 새 SOBP가 발급되는 게 원칙이라(§14 항목1), 다중 페이지 문서는 페이지별
+  // 패턴주소(SOBP)를 따로 들고 있는다. index 0 = 1페이지 ... ncode 필드는 대표값(보통
+  // pageNcodes[0])으로 계속 쓴다. 실 펜 SDK 연동 전까지는 문서 생성 시 임시로 채운다.
+  pageNcodes        String[]       @default([]) @map("page_ncodes")
   status            DocumentStatus @default(printed)
   pageImages        Json           @default("[]") @map("page_images")
   createdAt         DateTime       @default(now()) @map("created_at")

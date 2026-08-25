@@ -108,7 +108,6 @@ export async function runOcrPipeline(documentId: string): Promise<
           required: f.required,
           config: f.config as FieldConfig,
           choiceOptions: f.choiceOptions.map((o) => o.storedValue),
-          documentYear: document.createdAt.getFullYear(),
           finalValue: r?.rawValue ?? null,
         });
         return {
