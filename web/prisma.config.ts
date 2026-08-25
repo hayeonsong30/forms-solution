@@ -10,6 +10,9 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // 마이그레이션(prisma migrate deploy)은 pgbouncer 풀링 연결로는 DDL이 불안정할 수 있어
+    // non-pooled 연결을 우선한다. 앱 런타임은 이 파일과 무관하게 lib/prisma.ts에서 항상
+    // DATABASE_URL(풀링)을 쓴다 — 여기서 바뀌는 건 CLI(generate/migrate)뿐이다.
+    url: process.env["DATABASE_URL_UNPOOLED"] || process.env["DATABASE_URL"],
   },
 });
