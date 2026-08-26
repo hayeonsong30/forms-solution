@@ -116,7 +116,6 @@ export async function POST(_req: Request, ctx: RouteContext<"/api/templates/[tem
       await tx.excelReportTemplate.create({
         data: {
           templateVersionId: newVersion.id,
-          type: e.type,
           name: e.name,
           fileName: e.fileName,
           fileData: e.fileData,

@@ -222,11 +222,7 @@ export const exportRequestSchema = z.object({
   documentIds: z.array(z.string()).min(1),
 });
 
-// PRD_Excel_플레이스홀더_간단버전 §9, §11
-export const excelTemplateTypeSchema = z.enum(["doc", "list"]);
-
 export const validateExcelTemplateSchema = z.object({
-  type: excelTemplateTypeSchema,
   fileName: z.string().min(1),
   fileDataUri: z.string().startsWith("data:"),
 });

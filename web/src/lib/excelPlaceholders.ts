@@ -19,20 +19,18 @@ export const SYSTEM_PLACEHOLDERS: PlaceholderDefinition[] = [
 // choice로 병합된 필드는 이미 개별 체크 필드가 지워지고 그룹 필드 하나만 남아있으므로
 // 별도 처리 없이 그대로 나열하면 된다(§6 "선택 그룹" 요구사항 자동 충족).
 //
-// includeRepeat(List Excel 전용, DigiDox 참고): 반복행은 동적으로 행을 복제하지 않고,
-// 컬럼별로 [데이터키.01]~[데이터키.NN](행 번호 고정 슬롯) 형태의 플레이스홀더를 최대
-// 행 수만큼 미리 나열한다. 반복 시작/종료 문법이 없어 Doc Excel과 같은 단순 셀 치환으로 처리된다.
-export async function listPlaceholders(
-  templateVersionId: string,
-  opts: { includeRepeat?: boolean } = {}
-): Promise<PlaceholderDefinition[]> {
+// 반복행(DigiDox 참고): 동적으로 행을 복제하지 않고, 컬럼별로 [데이터키.01]~[데이터키.NN]
+// (행 번호 고정 슬롯) 형태의 플레이스홀더를 최대 행 수만큼 미리 나열한다. 반복 시작/종료
+// 문법이 없어 일반 필드와 같은 단순 셀 치환으로 처리된다. (2026-08-26: 예전엔 이 반복행
+// 슬롯을 "List Excel" 타입에서만 허용했으나, 실제 DigiDox 레퍼런스는 문서 1건용 서식에도
+// 반복행 슬롯을 동일하게 쓰고 있어 — 타입 구분 없이 항상 포함시키는 것으로 정정했다.)
+export async function listPlaceholders(templateVersionId: string): Promise<PlaceholderDefinition[]> {
   const fields = await prisma.field.findMany({
     where: { templateVersionId, hidden: false },
     orderBy: [{ boxY: "asc" }, { boxX: "asc" }],
     select: { label: true, dataKey: true, type: true },
   });
   const base: PlaceholderDefinition[] = [...fields, ...SYSTEM_PLACEHOLDERS];
-  if (!opts.includeRepeat) return base;
 
   const groups = await prisma.repeatGroup.findMany({
     where: { templateVersionId },
@@ -130,18 +128,4 @@ function toDisplayValue(
       .join(", ");
   }
   return finalValue;
-}
-
-// §10 샘플 생성: 실제 문서 없이 필드 유형별 테스트 값을 채운다. AI 호출 없음.
-export function buildSampleValues(fields: PlaceholderDefinition[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const f of fields) {
-    if (f.system) {
-      result[f.dataKey] = { document_no: "SAMPLE-0001", template_name: "샘플 양식", printed_at: "2026-08-21 09:00" }[f.dataKey] ?? "2026-08-21 09:00";
-      continue;
-    }
-    result[f.dataKey] =
-      { text: "サンプル", number: "123", date: "2026-08-21", time: "09:30", check: "✓", choice: "샘플 옵션" }[f.type] ?? "샘플";
-  }
-  return result;
 }

@@ -23,7 +23,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/template-versio
     return Response.json({ error: "FILE_TOO_LARGE" }, { status: 400 });
   }
 
-  const placeholders = await listPlaceholders(versionId, { includeRepeat: parsed.data.type === "list" });
+  const placeholders = await listPlaceholders(versionId);
   let result;
   try {
     result = await inspectExcelTemplate(buffer, placeholders.map((p) => p.dataKey));

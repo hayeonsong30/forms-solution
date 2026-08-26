@@ -84,7 +84,8 @@ const STRINGS = {
     errorLockedRestore: "잠긴 필드는 복원할 수 없습니다.",
     errorNoRegionRestore: "옵션에 영역이 지정되지 않아 개별 필드로 복원할 수 없습니다.",
     errorLockedDelete: "잠긴 필드는 삭제할 수 없습니다.",
-    errorAiDetectFailed: "AI 자동 추천 실패",
+    errorAiDetectFailed: "AI 자동 추천에 실패했습니다. 잠시 후 다시 시도해주세요.",
+    errorAiDetectGeminiFailed: "AI 분석에 실패했습니다. 잠시 후 다시 시도해주세요.",
     errorPrintableFailed: "인쇄 가능 전환 실패",
     errorPdfUploadFailed: "PDF 업로드에 실패했습니다.",
     aiFilteredInfo: (n: number) => `신뢰도가 낮거나 영역이 너무 작은 후보 ${n}개는 자동으로 제외했습니다.`,
@@ -168,7 +169,8 @@ const STRINGS = {
     errorLockedRestore: "ロックされたフィールドは復元できません。",
     errorNoRegionRestore: "オプションに領域が指定されていないため、個別フィールドに復元できません。",
     errorLockedDelete: "ロックされたフィールドは削除できません。",
-    errorAiDetectFailed: "AI自動提案に失敗しました",
+    errorAiDetectFailed: "AI自動提案に失敗しました。しばらくしてからもう一度お試しください。",
+    errorAiDetectGeminiFailed: "AI分析に失敗しました。しばらくしてからもう一度お試しください。",
     errorPrintableFailed: "印刷可能への切り替えに失敗しました",
     errorPdfUploadFailed: "PDFのアップロードに失敗しました。",
     aiFilteredInfo: (n: number) => `信頼度が低いか領域が小さすぎる候補 ${n}件は自動的に除外しました。`,
@@ -725,7 +727,10 @@ export default function EditorPage({ params }: { params: Promise<{ templateId: s
       });
       const json = await res.json();
       if (!res.ok) {
-        setActionError(json.message ?? s.errorAiDetectFailed);
+        // 서버가 내려주는 Gemini 원문 에러를 그대로 노출하지 않고, 오류 코드별로
+        // 다듬은 문구를 보여준다(2026-08-26 정책 결정). TEMPLATE_LOCKED/PDF_REQUIRED는
+        // 버튼이 비활성 상태라 정상 흐름에서는 발생하지 않는다.
+        setActionError(json.error === "AI_DETECTION_FAILED" ? s.errorAiDetectGeminiFailed : s.errorAiDetectFailed);
         return;
       }
       if (json.filteredOutCount > 0) {

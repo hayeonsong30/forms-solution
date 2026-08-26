@@ -48,7 +48,6 @@ const STRINGS = {
     backToList: "← 문서 조회",
     pdf: "PDF",
     excel: "Excel",
-    listExcel: "List Excel",
     textView: "텍스트 변환 보기",
     textViewTooltip: "켜면 손글씨를 인식해 빈 양식 위에 컴퓨터 텍스트로 채워 보여줍니다",
     recognizing: "필기 인식 중… (실제 OCR 실행)",
@@ -79,7 +78,6 @@ const STRINGS = {
     backToList: "← 文書照会",
     pdf: "PDF",
     excel: "Excel",
-    listExcel: "List Excel",
     textView: "テキスト変換表示",
     textViewTooltip: "オンにすると手書き文字を認識し、空の様式にコンピューターフォントで反映して表示します",
     recognizing: "筆記認識中…（実際にOCRを実行）",
@@ -105,7 +103,6 @@ const STRINGS = {
     backToList: string;
     pdf: string;
     excel: string;
-    listExcel: string;
     textView: string;
     textViewTooltip: string;
     recognizing: string;
@@ -128,7 +125,6 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
   const { lang } = useLanguage();
   const s = STRINGS[lang];
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
-  const [hasListTemplate, setHasListTemplate] = useState(false);
   const [repeatGroups, setRepeatGroups] = useState<RepeatGroupMeta[]>([]);
   const [textView, setTextView] = useState(false);
   const [recognizing, setRecognizing] = useState(false);
@@ -151,10 +147,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
       .then((r) => r.json())
       .then((detail) => {
         setRepeatGroups(detail.repeatGroups.map((g: RepeatGroupMeta) => ({ id: g.id, rowHeight: g.rowHeight })));
-        return fetch(`/api/template-versions/${detail.version.id}/excel-template?type=list`);
-      })
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- derives from doc after it loads
-      .then((r) => setHasListTemplate(r.ok));
+      });
   }, [doc]);
 
   useEffect(() => {
@@ -222,7 +215,7 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
             {s.pdf}
           </a>
           <a
-            href={confirmed ? `/api/documents/${doc.id}/export/customer-xlsx?type=doc` : undefined}
+            href={confirmed ? `/api/documents/${doc.id}/export/customer-xlsx` : undefined}
             aria-disabled={!confirmed}
             className={`text-sm border rounded-md px-3.5 py-2 ${
               confirmed ? "border-slate-300 hover:bg-slate-50" : "border-slate-200 text-slate-300 pointer-events-none"
@@ -230,17 +223,6 @@ export default function SimpleDocumentDetailPage({ params }: { params: Promise<{
           >
             {s.excel}
           </a>
-          {hasListTemplate && (
-            <a
-              href={confirmed ? `/api/documents/${doc.id}/export/customer-xlsx?type=list` : undefined}
-              aria-disabled={!confirmed}
-              className={`text-sm border rounded-md px-3.5 py-2 ${
-                confirmed ? "border-slate-300 hover:bg-slate-50" : "border-slate-200 text-slate-300 pointer-events-none"
-              }`}
-            >
-              {s.listExcel}
-            </a>
-          )}
           <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer select-none ml-2">
             {s.textView}
             <button

@@ -24,12 +24,6 @@ enum TemplateStatus {
   printable // 편집 잠김, 인쇄 가능
 }
 
-// PRD_Excel_플레이스홀더_간단버전 §11: 문서 1건용(doc) / 여러 문서 리스트용(list) 두 종류.
-enum ExcelReportTemplateType {
-  doc
-  list
-}
-
 enum ExcelReportTemplateStatus {
   validating
   invalid
@@ -176,14 +170,15 @@ model TemplateVersion {
   @@map("template_versions")
 }
 
-// PRD_Excel_플레이스홀더_간단버전: 고객이 자기 엑셀 서식에 [데이터키]를 직접 넣어 올리면,
-// 그 서식(병합·서식·이미지)을 그대로 유지한 채 최종 확정값으로 치환해 돌려준다.
-// 양식 버전마다 doc/list 타입 각각 활성 템플릿 1개만 둔다(간단 버전 범위).
+// 고객이 자기 엑셀 서식에 [데이터키]를 직접 넣어 올리면, 그 서식(병합·서식·이미지)을 그대로
+// 유지한 채 최종 확정값으로 치환해 돌려준다. 양식 버전당 활성 템플릿 1개만 둔다.
+// (2026-08-26: 문서 1건용/반복행 리스트용으로 doc·list 타입을 나눴었으나, 실제 DigiDox
+// 레퍼런스를 보면 두 타입 모두 반복행 슬롯 플레이스홀더[데이터키.NN]를 동일하게 지원하고
+// 차이는 그냥 레이아웃뿐이었다 — 타입 구분을 없애고 템플릿 1개로 통합했다.)
 model ExcelReportTemplate {
   id                String                     @id @default(uuid())
-  templateVersionId String                     @map("template_version_id")
+  templateVersionId String                     @unique @map("template_version_id")
   templateVersion   TemplateVersion            @relation(fields: [templateVersionId], references: [id])
-  type              ExcelReportTemplateType
   name              String
   fileName          String                     @map("file_name")
   // 업로드한 원본 .xlsx (base64) — 렌더링 시 매번 이 원본에서 복사해 치환한다.
@@ -196,7 +191,6 @@ model ExcelReportTemplate {
   createdAt         DateTime                   @default(now()) @map("created_at")
   updatedAt         DateTime                   @updatedAt @map("updated_at")
 
-  @@unique([templateVersionId, type])
   @@map("excel_report_templates")
 }
 
