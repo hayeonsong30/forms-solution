@@ -12,17 +12,14 @@ const STATUS_TONE: Record<DocumentStatus, "amber" | "green" | "slate" | "red" | 
   printed: "slate",
   received: "slate",
   processing: "brand",
-  review_required: "amber",
+  review_required: "slate",
   confirmed: "green",
   error: "red",
 };
 
-const ISSUE_REASONS = new Set(["required_missing", "type_mismatch", "invalid_date", "invalid_time", "number_out_of_range"]);
-
 const ROW_STATUS_CLASS: Record<RowStatus, string> = {
   pending: "bg-slate-100 text-slate-500",
   issue: "bg-red-50 text-red-600",
-  review: "bg-[var(--color-status-amber-bg)] text-[var(--color-status-amber-fg)]",
   done: "bg-[var(--color-status-green-bg)] text-[var(--color-status-green-fg)]",
 };
 
@@ -32,8 +29,8 @@ const STRINGS = {
       printed: "인쇄됨",
       received: "작성",
       processing: "처리 중",
-      review_required: "검수 필요",
-      confirmed: "확정",
+      review_required: "작성",
+      confirmed: "완료",
       error: "오류",
     } satisfies Record<DocumentStatus, string>,
     reason: {
@@ -57,7 +54,6 @@ const STRINGS = {
     rowStatus: {
       pending: "OCR 전",
       issue: "미입력·오류",
-      review: "확인 필요",
       done: "완료",
     },
     loading: "불러오는 중…",
@@ -95,6 +91,9 @@ const STRINGS = {
     pagePanelAddress: "SOBP",
     pagePrev: "이전 페이지",
     pageNext: "다음 페이지",
+    reissue: "다시 받기",
+    reissuing: "받는 중…",
+    reissueTitle: "같은 SOBP로 아직 인쇄만 하고 필기 스캔은 안 들어온 경우에만 다시 받을 수 있습니다.",
     unset: "(미기재)",
     noChoiceOptions: "선택지가 정의되지 않았습니다.",
     placeholders: { date: "년.월.일.", time: "--:--", number: "0" },
@@ -109,8 +108,8 @@ const STRINGS = {
       printed: "印刷済み",
       received: "作成中",
       processing: "処理中",
-      review_required: "要確認",
-      confirmed: "確定",
+      review_required: "作成",
+      confirmed: "完了",
       error: "エラー",
     } satisfies Record<DocumentStatus, string>,
     reason: {
@@ -134,7 +133,6 @@ const STRINGS = {
     rowStatus: {
       pending: "OCR前",
       issue: "未入力・エラー",
-      review: "要確認",
       done: "完了",
     },
     loading: "読み込み中…",
@@ -172,6 +170,9 @@ const STRINGS = {
     pagePanelAddress: "SOBP",
     pagePrev: "前のページ",
     pageNext: "次のページ",
+    reissue: "再取得",
+    reissuing: "取得中…",
+    reissueTitle: "同じSOBPで印刷のみ行い、まだ筆記スキャンが届いていない場合のみ再取得できます。",
     unset: "（未記入）",
     noChoiceOptions: "選択肢が定義されていません。",
     placeholders: { date: "年.月.日.", time: "--:--", number: "0" },
@@ -188,13 +189,12 @@ type Strings = typeof STRINGS.ko;
 // 데모/시연용 — 켜져 있으면 문서 상태(확정 포함)와 무관하게 AI OCR을 다시 실행할 수 있다.
 const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-type RowStatus = "pending" | "issue" | "review" | "done";
+type RowStatus = "pending" | "issue" | "done";
 
 function rowStatusOf(v: { reviewStatus: string; reviewReasons: string[]; rawOcrValue: string | null; normalizedValue: string | null; finalValue: string | null }): RowStatus {
   if (v.reviewStatus === "confirmed") return "done";
   if (v.rawOcrValue === null && v.normalizedValue === null && v.finalValue === null) return "pending";
-  if (v.reviewReasons.some((r) => ISSUE_REASONS.has(r))) return "issue";
-  return "review";
+  return "issue";
 }
 
 // 프로토타입 outputDialog(현행 확정 화면)과 동일한 구조로 맞춘다: 좌측 작성 원본 뷰어 +
@@ -295,6 +295,28 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
         return;
       }
       await load();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // "다시 받기" — FRM-01의 다운로드 버튼을 없앤 대신(2026-08-27), 아직 필기 스캔이 하나도
+  // 들어오지 않은(status === "printed") 문서에 한해 같은 SOBP로 만든 빈 양식 PDF를 다시
+  // 받을 수 있게 한다. 스캔이 이미 존재하는 상태에서 같은 SOBP를 또 내려주면 고토부키형
+  // 공유 SOBP처럼 예전 스캔과 새 스캔이 뒤섞여 구분이 안 되므로, printed 상태 전용이다.
+  async function reissuePdf() {
+    if (!doc) return;
+    setBusy("reissue");
+    try {
+      const res = await fetch(`/api/templates/${doc.templateVersion.template.id}/pdf`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${doc.templateVersion.template.name}_${doc.ncode ?? documentId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
     } finally {
       setBusy(null);
     }
@@ -514,50 +536,54 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
           </div>
         </div>
 
-        {/* 페이지/SOBP 바 — 공유 SOBP든 양식 자체가 다중 페이지든 같은 화면·같은 조작으로
-            보여준다(사용자 지적, 2026-08-25: "같은 화면 같은 기능인데 왜 다르게 표시하냐").
-            No. 선택 + 이전/다음으로 넘기고 그 페이지의 SOBP만 보여준다. 차이는 내부적으로만:
-            공유는 페이지 하나하나가 실제로는 다른 문서라 페이지 이동이 곧 문서 이동이고,
-            SOBP 값은 전 페이지가 동일(공유의 정의상)하다. 단일 페이지 문서는 SOBP 배지 하나만. */}
-        {shared || doc.templateVersion.pageCount > 1 ? (
-          <div className="shrink-0 flex items-center gap-2 px-5 py-2 border-b border-[var(--color-border)] bg-slate-50 flex-wrap text-xs">
-            <span className="text-slate-400">{s.pagePanelTitle}</span>
+        {/* 페이지/SOBP 바 — 공유 SOBP든 양식 자체가 다중 페이지든 단일 페이지든 항상 같은
+            화면·같은 조작으로 보여준다(사용자 지적, 2026-08-25: "같은 화면 같은 기능인데 왜
+            다르게 표시하냐" / 2026-08-27: 페이지가 1개뿐이어도 배지로 따로 안 빼고 그대로
+            노출). No. 선택 + 이전/다음으로 넘기고 그 페이지의 SOBP를 보여준다. 페이지가
+            1개면 ◄/►가 둘 다 비활성인 채로 그대로 보인다. */}
+        <div className="shrink-0 flex items-center gap-2 px-5 py-2 border-b border-[var(--color-border)] bg-slate-50 flex-wrap text-xs">
+          <span className="text-slate-400">{s.pagePanelTitle}</span>
+          <button
+            onClick={() => goToPage(groupPageNo - 1)}
+            disabled={groupPageNo <= 1}
+            title={s.pagePrev}
+            className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            ‹
+          </button>
+          <span className="text-slate-400">{s.pagePanelNo}</span>
+          <select
+            value={groupPageNo}
+            onChange={(e) => goToPage(Number(e.target.value))}
+            className="rounded border border-[var(--color-border)] bg-white px-1.5 py-1"
+          >
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => goToPage(groupPageNo + 1)}
+            disabled={groupPageNo >= totalPages}
+            title={s.pageNext}
+            className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            ›
+          </button>
+          <span className="text-slate-400 ml-2">{s.pagePanelAddress}</span>
+          <span className="font-mono text-slate-600">{sobpValue}</span>
+          {doc.status === "printed" && (
             <button
-              onClick={() => goToPage(groupPageNo - 1)}
-              disabled={groupPageNo <= 1}
-              title={s.pagePrev}
-              className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              onClick={reissuePdf}
+              disabled={busy !== null}
+              title={s.reissueTitle}
+              className="ml-2 text-slate-400 underline decoration-dotted hover:text-slate-600 cursor-pointer disabled:opacity-50"
             >
-              ‹
+              {busy === "reissue" ? s.reissuing : s.reissue}
             </button>
-            <span className="text-slate-400">{s.pagePanelNo}</span>
-            <select
-              value={groupPageNo}
-              onChange={(e) => goToPage(Number(e.target.value))}
-              className="rounded border border-[var(--color-border)] bg-white px-1.5 py-1"
-            >
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => goToPage(groupPageNo + 1)}
-              disabled={groupPageNo >= totalPages}
-              title={s.pageNext}
-              className="rounded border border-[var(--color-border)] bg-white w-6 h-6 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              ›
-            </button>
-            <span className="text-slate-400 ml-2">{s.pagePanelAddress}</span>
-            <span className="font-mono text-slate-600">{sobpValue}</span>
-          </div>
-        ) : (
-          <div className="shrink-0 flex items-center px-5 py-2 border-b border-[var(--color-border)] bg-slate-50">
-            <span className="text-xs rounded-full px-2.5 py-1 font-medium bg-[var(--color-brand-600)] text-white font-mono">{doc.ncode}</span>
-          </div>
-        )}
+          )}
+        </div>
 
         {actionError && (
           <p className="shrink-0 text-sm text-red-600 bg-red-50 border-b border-red-200 px-5 py-2">{actionError}</p>
@@ -621,7 +647,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                           className={`absolute border text-[9px] px-0.5 overflow-hidden text-left cursor-pointer ${
                             activeKey === v.id
                               ? "border-[3px] border-[#1668e3] bg-[#1668e31c] shadow-[0_0_0_3px_#fff,0_0_0_5px_#1668e3]"
-                              : rowStatusOf(v) === "issue" || rowStatusOf(v) === "review"
+                              : rowStatusOf(v) === "issue"
                                 ? "border-[var(--color-status-amber-fg)] bg-[var(--color-status-amber-bg)]/40"
                                 : "border-transparent hover:border-[#76a8e7] hover:bg-[#1768d710]"
                           }`}
@@ -696,6 +722,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                     row={r}
                     status={rowStatuses.get(r.key) as RowStatus}
                     active={activeKey === r.key}
+                    confirmed={doc.status === "confirmed"}
                     onSave={saveFinalValue}
                     onFocus={() => focusKey(r.key)}
                   />
@@ -762,12 +789,14 @@ function FieldRow({
   row,
   status,
   active,
+  confirmed,
   onSave,
   onFocus,
 }: {
   row: { key: string; label: string; required: boolean; dataKey: string; type: FieldType; value: DocumentDetailDTO["fieldValues"][number] | null };
   status: RowStatus;
   active: boolean;
+  confirmed: boolean;
   onSave: (id: string, finalValue: string | null) => void;
   onFocus: () => void;
 }) {
@@ -778,7 +807,9 @@ function FieldRow({
   // 알 수 없다.
   const [local, setLocal] = useState(row.value?.finalValue ?? row.value?.normalizedValue ?? row.value?.rawOcrValue ?? "");
   const meta = { label: s.rowStatus[status], className: ROW_STATUS_CLASS[status] };
-  const disabled = !row.value;
+  // 확정된 문서는 재검수(reopen) 절차 없이는 값을 못 고친다 — 검수는 안 하기로 하고,
+  // 대신 확정 즉시 입력 자체를 막는다(2026-08-27).
+  const disabled = !row.value || confirmed;
 
   return (
     <div
@@ -789,9 +820,7 @@ function FieldRow({
           ? "border-l-[#1668e3] bg-[#eef5ff]"
           : status === "issue"
             ? "border-l-transparent bg-red-50/60"
-            : status === "review"
-              ? "border-l-transparent bg-[var(--color-status-amber-bg)]/40"
-              : "border-l-transparent hover:bg-[#f7faff]"
+            : "border-l-transparent hover:bg-[#f7faff]"
       }`}
       style={{ gridTemplateColumns: "1fr 160px 84px" }}
     >
@@ -811,6 +840,7 @@ function FieldRow({
           <Select
             className="w-full"
             value={local}
+            disabled={disabled}
             onChange={(e) => {
               setLocal(e.target.value);
               onSave(row.value!.id, e.target.value || null);
@@ -825,6 +855,7 @@ function FieldRow({
             type="date"
             className="w-full"
             value={local}
+            disabled={disabled}
             onChange={(e) => {
               setLocal(e.target.value);
               onSave(row.value!.id, e.target.value || null);
@@ -835,6 +866,7 @@ function FieldRow({
             type="time"
             className="w-full"
             value={local}
+            disabled={disabled}
             onChange={(e) => {
               setLocal(e.target.value);
               onSave(row.value!.id, e.target.value || null);
@@ -845,6 +877,7 @@ function FieldRow({
             options={(row.value.field?.choiceOptions ?? []).map((o) => o.storedValue)}
             mode={(row.value.field ?? row.value.repeatColumn)?.config.choice?.mode ?? "single"}
             value={local}
+            disabled={disabled}
             onChange={(v) => {
               setLocal(v);
               onSave(row.value!.id, v || null);
@@ -855,13 +888,13 @@ function FieldRow({
           <Input
             className="w-full"
             value={local}
+            disabled={disabled}
             onChange={(e) => setLocal(e.target.value)}
             onBlur={() => onSave(row.value!.id, local || null)}
           />
         )}
       </div>
       <span className={`shrink-0 text-center text-xs rounded-full px-2 py-1 font-medium ${meta.className}`}>{meta.label}</span>
-      <span className="sr-only">{disabled}</span>
       {row.value && row.value.reviewReasons.length > 0 && (
         <div className="text-xs text-[var(--color-status-amber-fg)] bg-[#fff7df] rounded px-2 py-1" style={{ gridColumn: "1 / 4" }}>
           {row.value.reviewReasons.map((r) => s.reason[r] ?? r).join(", ")}
@@ -937,19 +970,21 @@ function ChoiceValueInput({
   options,
   mode,
   value,
+  disabled,
   onChange,
   s,
 }: {
   options: string[];
   mode: "single" | "multiple";
   value: string;
+  disabled?: boolean;
   onChange: (v: string) => void;
   s: Strings;
 }) {
   const selected = value ? value.split(",").map((part) => part.trim()) : [];
   if (mode === "single") {
     return (
-      <Select className="w-full" value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select className="w-full" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         <option value="">{s.unset}</option>
         {options.map((o) => (
           <option key={o} value={o}>
@@ -962,10 +997,11 @@ function ChoiceValueInput({
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((o) => (
-        <label key={o} className="flex items-center gap-1 text-xs">
+        <label key={o} className={`flex items-center gap-1 text-xs ${disabled ? "text-slate-400" : ""}`}>
           <input
             type="checkbox"
             checked={selected.includes(o)}
+            disabled={disabled}
             onChange={(e) => {
               const next = e.target.checked ? [...selected, o] : selected.filter((part) => part !== o);
               onChange(next.join(", "));

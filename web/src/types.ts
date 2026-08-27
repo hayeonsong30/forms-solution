@@ -176,8 +176,6 @@ export type DocumentDTO = {
 export type DocumentListItemDTO = DocumentDTO & {
   templateVersion: { pageCount: number; template: { id: string; name: string } };
   org: { name: string };
-  needsReviewCount: number;
-  repeatRowCount: number;
   // 동일 SOBP(ncode)로 여러 건이 들어온 경우(예: 고토부키형 공유 SOBP) 목록에서는 1건으로
   // 묶어 보여준다 — pageScanCount는 그 그룹에 실제로 들어온 스캔(페이지) 수, groupIds는
   // 그룹에 속한 모든 문서 id(가상번호 순서 = createdAt 오름차순). 일반 문서는 항상

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { DocumentStatus } from "@/generated/prisma/client";
 
-// PRD_폼솔루션 §7.8: 목록에 OCR 오류 수와 반복행 수를 표시한다.
 // PRD_폼솔루션 §14.1: 동일 SOBP(ncode)로 여러 건이 들어온 경우(공유 SOBP) 목록에서는
 // 1건으로 묶어 보여주고, "페이지"는 실제 들어온 스캔 수로 카운트한다. 공유가 아닌 일반
 // 문서는 지금까지처럼 양식의 실제 페이지 수를 보여준다(스캔 건수=1로 뭉개지 않음).
@@ -31,23 +30,9 @@ export async function GET() {
     },
   });
 
-  const withCounts = await Promise.all(
-    documents.map(async (d) => {
-      const [needsReviewCount, rowIndexes] = await Promise.all([
-        prisma.fieldValue.count({ where: { documentId: d.id, reviewStatus: "needs_review" } }),
-        prisma.fieldValue.findMany({
-          where: { documentId: d.id, rowIndex: { not: null } },
-          select: { rowIndex: true },
-          distinct: ["rowIndex"],
-        }),
-      ]);
-      return { ...d, needsReviewCount, repeatRowCount: rowIndexes.length };
-    })
-  );
-
   // ncode가 있고 같은 ncode를 쓰는 문서가 2건 이상이면 그룹으로 묶는다.
-  const byNcode = new Map<string, typeof withCounts>();
-  for (const d of withCounts) {
+  const byNcode = new Map<string, typeof documents>();
+  for (const d of documents) {
     if (!d.ncode) continue;
     const list = byNcode.get(d.ncode) ?? [];
     list.push(d);
@@ -56,7 +41,7 @@ export async function GET() {
 
   const seen = new Set<string>();
   const result = [];
-  for (const d of withCounts) {
+  for (const d of documents) {
     if (seen.has(d.id)) continue;
     const group = d.ncode ? byNcode.get(d.ncode) : undefined;
     if (group && group.length > 1) {
@@ -66,8 +51,6 @@ export async function GET() {
       const latest = group[group.length - 1];
       result.push({
         ...latest,
-        needsReviewCount: group.reduce((sum, g) => sum + g.needsReviewCount, 0),
-        repeatRowCount: group.reduce((sum, g) => sum + g.repeatRowCount, 0),
         status: representativeStatus(group.map((g) => g.status)),
         pageScanCount: group.length,
         groupIds: group.map((g) => g.id),

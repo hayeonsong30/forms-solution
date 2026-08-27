@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<Lang, Record<DocumentStatus, string>> = {
     printed: "인쇄됨",
     received: "작성",
     processing: "처리 중",
-    review_required: "확인 필요",
+    review_required: "작성",
     confirmed: "완료",
     error: "오류",
   },
@@ -21,7 +21,7 @@ const STATUS_LABELS: Record<Lang, Record<DocumentStatus, string>> = {
     printed: "印刷済み",
     received: "作成",
     processing: "処理中",
-    review_required: "確認要",
+    review_required: "作成",
     confirmed: "完了",
     error: "エラー",
   },
@@ -31,7 +31,7 @@ const STATUS_TONE: Record<DocumentStatus, "amber" | "green" | "slate" | "red" | 
   printed: "slate",
   received: "slate",
   processing: "brand",
-  review_required: "amber",
+  review_required: "slate",
   confirmed: "green",
   error: "red",
 };
@@ -147,7 +147,7 @@ export default function DocumentsPage() {
     () => ({
       total: documents.length,
       printed: documents.filter((d) => d.status === "printed").length,
-      writing: documents.filter((d) => d.status === "received" || d.status === "processing").length,
+      writing: documents.filter((d) => d.status === "received" || d.status === "processing" || d.status === "review_required").length,
       confirmed: documents.filter((d) => d.status === "confirmed").length,
     }),
     [documents]

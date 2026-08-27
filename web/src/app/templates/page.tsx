@@ -45,8 +45,6 @@ const STRINGS = {
     printStatusInfo: (total: number, remaining: number) => `설정 ${total} / 남은 인쇄 ${remaining} (부)`,
     printCountCell: (total: number, remaining: number) => `${total} / ${remaining}`,
     cancel: "닫기",
-    downloading: "다운로드 중…",
-    download: "↓ 다운로드 (PDF)",
     printing: "인쇄 등록 중…",
     printAction: "🖨 인쇄하기",
   },
@@ -87,8 +85,6 @@ const STRINGS = {
     printStatusInfo: (total: number, remaining: number) => `設定 ${total} / 残り印刷 ${remaining}（部）`,
     printCountCell: (total: number, remaining: number) => `${total} / ${remaining}`,
     cancel: "閉じる",
-    downloading: "ダウンロード中…",
-    download: "↓ ダウンロード（PDF）",
     printing: "印刷登録中…",
     printAction: "🖨 印刷する",
   },
@@ -343,7 +339,7 @@ function PrintSettingsDialog({
   const { lang } = useLanguage();
   const s = STRINGS[lang];
   const [settings, setSettings] = useState<PrintSettings>(loadPrintSettings);
-  const [busy, setBusy] = useState<"download" | "print" | null>(null);
+  const [busy, setBusy] = useState(false);
   const remaining = Math.max(0, template.printCopies - template.printedCount);
 
   function persist(next: PrintSettings) {
@@ -351,39 +347,23 @@ function PrintSettingsDialog({
     window.localStorage.setItem(PRINT_SETTINGS_KEY, JSON.stringify(next));
   }
 
-  // 다운로드: 예정 인쇄 부수만큼 페이지를 이어붙인 PDF 한 장을 받는다. 문서함 등록 같은
-  // 부수효과는 없다 — 인쇄 자체는 앱 밖(실물 프린터/인쇄소)에서 이뤄지기 때문.
-  async function handleDownload() {
-    setBusy("download");
-    try {
-      const res = await fetch(`/api/templates/${template.id}/pdf?copies=${template.printCopies}`);
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const date = new Date().toISOString().slice(0, 10);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${template.name}_${date}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  // 인쇄하기: 남은 부수만큼 문서(=SOBP)를 한 번에 발급해 문서함에 등록한다.
+  // 인쇄하기: 클릭할 때마다 새 SOBP 1부(=이 양식의 페이지 수만큼)를 순차 발급해 문서함에
+  // 1건 등록한다(2026-08-27 정책 — "다운로드" 버튼은 없앰: 원래 인쇄 스펙은 프린터 솔루션
+  // 앱 호출·위임이고, 지금 이 요청이 실제로 어떻게 처리되는지(파일 전달 vs 프린터 호출)는
+  // 사용자에게 노출되지 않는 내부 구현일 뿐이다). 설정 부수(printCopies)에 도달하면
+  // remaining이 0이 되어 버튼이 비활성화된다.
   async function handlePrint() {
     if (remaining <= 0) return;
-    setBusy("print");
+    setBusy(true);
     try {
       const res = await fetch(`/api/templates/${template.id}/documents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: remaining }),
+        body: JSON.stringify({ count: 1 }),
       });
       if (res.ok) await onPrinted();
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
@@ -442,17 +422,12 @@ function PrintSettingsDialog({
               {s.resetDefault}
             </button>
 
-            <div className="flex gap-2">
-              <Button className="flex-1" onClick={handleDownload} disabled={busy !== null}>
-                {busy === "download" ? s.downloading : s.download}
-              </Button>
-              <Button className="flex-1" variant="primary" onClick={handlePrint} disabled={busy !== null || remaining <= 0}>
-                {busy === "print" ? s.printing : s.printAction}
-              </Button>
-            </div>
+            <Button className="w-full" variant="primary" onClick={handlePrint} disabled={busy || remaining <= 0}>
+              {busy ? s.printing : s.printAction}
+            </Button>
           </div>
           <div className="flex gap-2 px-5 pb-5">
-            <Button className="flex-1" onClick={onCancel} disabled={busy !== null}>
+            <Button className="flex-1" onClick={onCancel} disabled={busy}>
               {s.cancel}
             </Button>
           </div>
