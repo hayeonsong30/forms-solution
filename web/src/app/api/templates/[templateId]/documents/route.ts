@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { generateNcode } from "@/lib/ncode";
 
-// PRD_폼솔루션 §8: 인쇄 가능한 템플릿만 문서를 발행(인쇄)할 수 있다.
-// body.count(기본 1)를 주면 그만큼 한 번에 발행한다 — "인쇄하기"는 설정된 인쇄 부수에서
-// 이미 발행된 만큼을 뺀 나머지를 한 번에 채워 넣는다(2026-08-25, 사용자 확정).
+// PRD_폼솔루션 §8: 인쇄 가능한 템플릿만 문서를 발행(다운로드)할 수 있다.
+// body.count(기본 1)를 주면 그만큼 한 번에 발행한다 — "다운로드"는 설정된 인쇄 부수에서
+// 이미 발행된 만큼을 뺀 나머지를 한 번에 채워 넣는다(2026-08-27, 인쇄하기→다운로드 전환).
 export async function POST(req: Request, ctx: RouteContext<"/api/templates/[templateId]/documents">) {
   const { templateId } = await ctx.params;
   const template = await prisma.template.findUnique({ where: { id: templateId } });

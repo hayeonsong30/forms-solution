@@ -18,7 +18,10 @@ export async function GET(_req: Request, ctx: RouteContext<"/api/documents/[docu
       },
       fieldValues: {
         include: { field: { include: { choiceOptions: { orderBy: { orderNo: "asc" } } } }, repeatColumn: true },
-        orderBy: [{ rowIndex: "asc" }],
+        // rowIndex만으로는 일반 필드(반복행이 아닌 값들은 전부 rowIndex가 같음)끼리 순서가
+        // 묶이지 않아 동률 처리 순서가 쿼리마다 달라질 수 있었다 — 캔버스상 위치(boxY/boxX)와
+        // 반복행 열 순서(orderNo)를 2차 정렬 기준으로 추가해 항상 같은 순서로 나오게 한다.
+        orderBy: [{ rowIndex: "asc" }, { field: { boxY: "asc" } }, { field: { boxX: "asc" } }, { repeatColumn: { orderNo: "asc" } }],
       },
     },
   });

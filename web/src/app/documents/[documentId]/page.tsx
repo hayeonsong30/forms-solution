@@ -61,6 +61,8 @@ const STRINGS = {
     uploadingImage: "이미지 업로드 중…",
     processingAi: "AI 처리 중… (최대 2분)",
     runOcr: "+ AI OCR 실행",
+    errorBanner: "OCR 처리 중 오류가 발생했습니다. 다시 시도해주세요.",
+    savedLabel: "✓ 저장됨",
     pdf: "PDF",
     csv: "CSV",
     excel: "Excel",
@@ -140,6 +142,8 @@ const STRINGS = {
     uploadingImage: "画像アップロード中…",
     processingAi: "AI処理中…（最大2分）",
     runOcr: "+ AI OCR実行",
+    errorBanner: "OCR処理中にエラーが発生しました。もう一度お試しください。",
+    savedLabel: "✓ 保存済み",
     pdf: "PDF",
     csv: "CSV",
     excel: "Excel",
@@ -211,6 +215,12 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  // blur 시 자동 저장되고 별도 "저장" 버튼이 없어서, 대신 방금 저장된 행에 잠깐
+  // "저장됨" 표시를 띄운다(2026-08-28) — 저장은 이미 되고 있는데 사용자가 확인할
+  // 방법이 없었다.
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
   // zoom=100은 "패널 너비에 꽉 채움"을 뜻한다 — 고정 700px 캔버스가 아니라 실측 패널 폭에
   // 비례한 값이라서, 화면이 커지면 원본도 같이 커진다("전체 화면으로" 피드백, 2026-08-20).
   const [zoom, setZoom] = useState(100);
@@ -366,12 +376,16 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
   }
 
   async function saveFinalValue(fieldValueId: string, finalValue: string | null) {
-    await fetch(`/api/documents/${documentId}/field-values/${fieldValueId}`, {
+    const res = await fetch(`/api/documents/${documentId}/field-values/${fieldValueId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ finalValue }),
     });
     await load();
+    if (!res.ok) return;
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    setSavedKey(fieldValueId);
+    savedTimerRef.current = setTimeout(() => setSavedKey(null), 1500);
   }
 
   function focusKey(key: string) {
@@ -715,6 +729,9 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                   </button>
                 )}
               </div>
+              {doc.status === "error" && (
+                <p className="shrink-0 px-3.5 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">{s.errorBanner}</p>
+              )}
               <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[#e4e8ec]">
                 {rows.map((r) => (
                   <FieldRow
@@ -723,6 +740,7 @@ export default function DocumentDetailPage({ params }: { params: Promise<{ docum
                     status={rowStatuses.get(r.key) as RowStatus}
                     active={activeKey === r.key}
                     confirmed={doc.status === "confirmed"}
+                    saved={savedKey === r.key}
                     onSave={saveFinalValue}
                     onFocus={() => focusKey(r.key)}
                   />
@@ -790,6 +808,7 @@ function FieldRow({
   status,
   active,
   confirmed,
+  saved,
   onSave,
   onFocus,
 }: {
@@ -797,6 +816,7 @@ function FieldRow({
   status: RowStatus;
   active: boolean;
   confirmed: boolean;
+  saved: boolean;
   onSave: (id: string, finalValue: string | null) => void;
   onFocus: () => void;
 }) {
@@ -806,7 +826,9 @@ function FieldRow({
   // 순으로)을 먼저 보여준다 — 검수 화면인데 인식값이 안 보이면 뭘 확인하라는 건지
   // 알 수 없다.
   const [local, setLocal] = useState(row.value?.finalValue ?? row.value?.normalizedValue ?? row.value?.rawOcrValue ?? "");
-  const meta = { label: s.rowStatus[status], className: ROW_STATUS_CLASS[status] };
+  const meta = saved
+    ? { label: s.savedLabel, className: "bg-blue-50 text-blue-600" }
+    : { label: s.rowStatus[status], className: ROW_STATUS_CLASS[status] };
   // 확정된 문서는 재검수(reopen) 절차 없이는 값을 못 고친다 — 검수는 안 하기로 하고,
   // 대신 확정 즉시 입력 자체를 막는다(2026-08-27).
   const disabled = !row.value || confirmed;

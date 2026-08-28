@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { DocumentListItemDTO, DocumentStatus } from "@/types";
 import { downloadExport } from "@/lib/downloadExport";
+import { DEMO_OWNER_EMAIL } from "@/lib/demoOwner";
 import { Badge, Button, Card, EmptyState, PageHeader } from "@/components/ui";
 import { PenConnectPanel } from "@/components/PenConnectPanel";
 import { useLanguage, type Lang } from "@/lib/language";
@@ -45,11 +46,12 @@ const STRINGS = {
     downloadExcel: "Excel 다운로드",
     importFromPen: "↑ 펜 데이터 가져오기",
     summaryTotal: "전체 문서",
-    summaryPrinted: "인쇄",
     summaryWriting: "작성",
     summaryConfirmed: "완료",
     searchPlaceholder: "문서 번호·양식명 검색",
     tabAll: "전체",
+    tabWriting: "작성",
+    tabConfirmed: "완료",
     colTemplateId: "양식 ID",
     colPageCount: "페이지",
     colOwner: "소유자",
@@ -68,11 +70,12 @@ const STRINGS = {
     downloadExcel: "Excelダウンロード",
     importFromPen: "↑ ペンデータ取り込み",
     summaryTotal: "全体文書",
-    summaryPrinted: "印刷",
     summaryWriting: "作成",
     summaryConfirmed: "完了",
     searchPlaceholder: "文書番号・様式名で検索",
     tabAll: "すべて",
+    tabWriting: "作成",
+    tabConfirmed: "完了",
     colTemplateId: "様式ID",
     colPageCount: "ページ",
     colOwner: "所有者",
@@ -93,11 +96,12 @@ const STRINGS = {
     downloadExcel: string;
     importFromPen: string;
     summaryTotal: string;
-    summaryPrinted: string;
     summaryWriting: string;
     summaryConfirmed: string;
     searchPlaceholder: string;
     tabAll: string;
+    tabWriting: string;
+    tabConfirmed: string;
     colTemplateId: string;
     colPageCount: string;
     colOwner: string;
@@ -110,11 +114,14 @@ const STRINGS = {
   }
 >;
 
-type FilterTab = "all" | DocumentStatus;
+type FilterTab = "all" | "writing" | "confirmed";
+
+function isWriting(status: DocumentStatus): boolean {
+  return status === "received" || status === "processing" || status === "review_required";
+}
 
 // Document에는 아직 작성자(로그인 사용자) 정보가 없다 — 로그인/세션이 생기기 전까지는
-// 데모 관리자 계정으로 고정 표시한다 (사용자 결정, 2026-08-20).
-const DEMO_OWNER_EMAIL = "demo-admin@neolab.local";
+// 데모 관리자 계정으로 고정 표시한다(DEMO_OWNER_EMAIL, 사용자 결정 2026-08-20).
 
 // "2026. 8. 20. 오후 3:00:44" 같은 로케일 문자열 대신 "2026-08-10 12:20:16" 형식으로
 // 고정한다 — 사용자 요청(2026-08-20), 표에서 정렬·비교하기 쉬운 형태.
@@ -143,18 +150,23 @@ export default function DocumentsPage() {
     refresh();
   }, []);
 
+  // 인쇄만 되고 아직 필기 스캔이 안 들어온 문서(status === "printed")는 이 화면에서
+  // 관리할 대상이 아니라서 아예 목록에서 뺀다 — "작성"이 시작된 뒤(받음/처리 중/검토
+  // 필요/확정)부터, 그리고 오류는 재처리 진입점이 이 화면뿐이라 예외적으로 계속 보여준다
+  // (2026-08-28, 사용자 결정).
+  const visibleDocuments = documents.filter((d) => d.status !== "printed");
+
   const summary = useMemo(
     () => ({
-      total: documents.length,
-      printed: documents.filter((d) => d.status === "printed").length,
-      writing: documents.filter((d) => d.status === "received" || d.status === "processing" || d.status === "review_required").length,
-      confirmed: documents.filter((d) => d.status === "confirmed").length,
+      total: visibleDocuments.length,
+      writing: visibleDocuments.filter((d) => isWriting(d.status)).length,
+      confirmed: visibleDocuments.filter((d) => d.status === "confirmed").length,
     }),
-    [documents]
+    [visibleDocuments]
   );
 
-  const filtered = documents
-    .filter((d) => tab === "all" || d.status === tab)
+  const filtered = visibleDocuments
+    .filter((d) => tab === "all" || (tab === "writing" ? isWriting(d.status) : d.status === "confirmed"))
     .filter(
       (d) =>
         query.trim() === "" ||
@@ -217,9 +229,8 @@ export default function DocumentsPage() {
         />
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         <SummaryCard label={s.summaryTotal} value={summary.total} />
-        <SummaryCard label={s.summaryPrinted} value={summary.printed} />
         <SummaryCard label={s.summaryWriting} value={summary.writing} tone="amber" />
         <SummaryCard label={s.summaryConfirmed} value={summary.confirmed} tone="green" />
       </div>
@@ -237,7 +248,7 @@ export default function DocumentsPage() {
           />
         </label>
         <div className="flex gap-1 flex-wrap">
-          {(["all", "printed", "received", "confirmed"] as FilterTab[]).map((t) => (
+          {(["all", "writing", "confirmed"] as FilterTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -245,7 +256,7 @@ export default function DocumentsPage() {
                 tab === t ? "bg-[var(--color-brand-600)] text-white" : "border border-[var(--color-border)] bg-white hover:bg-slate-50"
               }`}
             >
-              {t === "all" ? s.tabAll : statusLabels[t]}
+              {t === "all" ? s.tabAll : t === "writing" ? s.tabWriting : s.tabConfirmed}
             </button>
           ))}
         </div>

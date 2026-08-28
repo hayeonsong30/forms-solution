@@ -33,7 +33,7 @@ const STRINGS = {
 export function Shell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { lang } = useLanguage();
-  const bare = pathname?.startsWith("/editor") || pathname?.startsWith("/simple");
+  const bare = pathname?.startsWith("/editor") || pathname?.startsWith("/simple") || pathname?.startsWith("/login");
 
   if (bare) return <>{children}</>;
 
